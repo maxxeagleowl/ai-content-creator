@@ -32,10 +32,10 @@ from knowledge_base import KnowledgeBase
 from llm_integration import get_llm_client
 from prompt_templates import (
     PromptContext,
+    build_analyst_system_prompt,
     build_brief_prompt,
     build_blog_post_prompt,
-    SYSTEM_PROMPT_WRITER,
-    SYSTEM_PROMPT_ANALYST,
+    build_writer_system_prompt,
 )
 
 # ── INIT ──────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ def generate_post(topic, audience_label, channel_label, custom_instructions, pro
 
     brief_response = llm.generate(
         user_prompt=build_brief_prompt(ctx),
-        system_prompt=SYSTEM_PROMPT_ANALYST,
+        system_prompt=build_analyst_system_prompt(ctx),
         temperature=0.4,
         max_tokens=600,
     )
@@ -104,7 +104,7 @@ def generate_post(topic, audience_label, channel_label, custom_instructions, pro
 
     content_response = llm.generate(
         user_prompt=blog_prompt,
-        system_prompt=SYSTEM_PROMPT_WRITER,
+        system_prompt=build_writer_system_prompt(ctx),
         temperature=0.75,
         max_tokens=900,
     )
@@ -150,7 +150,9 @@ Return ONLY the revised post — no preamble, no notes, no explanation."""
 
     response = llm.generate(
         user_prompt=refine_prompt,
-        system_prompt=SYSTEM_PROMPT_WRITER,
+        system_prompt=build_writer_system_prompt(
+            PromptContext(topic=topic, channel=channel, audience=audience)
+        ),
         temperature=0.65,
         max_tokens=900,
     )

@@ -212,7 +212,7 @@ def run_uniqueness_comparison(
     Returns:
         Dict with 'fitbyte_output', 'generic_output', and 'analysis'
     """
-    from prompt_templates import build_generic_prompt, SYSTEM_PROMPT_WRITER
+    from prompt_templates import build_generic_prompt
 
     print("  Generating FitByte branded content...")
     fitbyte_response = llm.generate(

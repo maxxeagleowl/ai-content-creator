@@ -30,8 +30,9 @@ from llm_integration import get_llm_client, run_uniqueness_comparison
 from prompt_templates import (
     PromptContext,
     build_brief_prompt,
+    build_writer_system_prompt,
+    build_analyst_system_prompt,
     get_prompt_for_channel,
-    SYSTEM_PROMPT_ANALYST,
 )
 
 OUTPUT_DIR = Path(__file__).parent.parent / "outputs"
@@ -100,7 +101,9 @@ Return as JSON with keys: brand_fit_score, market_relevance, best_angle, risk"""
 
         response = self.llm.generate(
             user_prompt=analysis_prompt,
-            system_prompt=SYSTEM_PROMPT_ANALYST,
+            system_prompt=build_analyst_system_prompt(
+                PromptContext(topic=topic, audience="general")
+            ),
             temperature=0,
             max_tokens=400,
         )
@@ -140,7 +143,7 @@ Return as JSON with keys: brand_fit_score, market_relevance, best_angle, risk"""
 
         brief_response = self.llm.generate(
             user_prompt=build_brief_prompt(ctx),
-            system_prompt=SYSTEM_PROMPT_ANALYST,
+            system_prompt=build_analyst_system_prompt(ctx),
             temperature=0.5,
             max_tokens=600,
         )
@@ -364,13 +367,12 @@ Return as JSON with keys: brand_fit_score, market_relevance, best_angle, risk"""
             market_context=context["market_context"],
         )
 
-        from prompt_templates import SYSTEM_PROMPT_WRITER
         _, fitbyte_prompt = get_prompt_for_channel(ctx)
 
         comparison = run_uniqueness_comparison(
             topic=topic,
             fitbyte_prompt=fitbyte_prompt,
-            fitbyte_system=SYSTEM_PROMPT_WRITER,
+            fitbyte_system=build_writer_system_prompt(ctx),
             llm=self.llm,
         )
 

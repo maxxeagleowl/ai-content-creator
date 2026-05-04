@@ -8,3 +8,9 @@ __pycache__/
 .pytest_cache/
 .env
 .env
+.vscode/settings.json
+src/__pycache__/document_processor.cpython-313.pyc
+src/__pycache__/knowledge_base.cpython-313.pyc
+src/__pycache__/llm_integration.cpython-313.pyc
+src/__pycache__/prompt_templates.cpython-313.pyc
+
