@@ -1,259 +1,348 @@
 """
 prompt_templates.py
--------------------
-Advanced prompt engineering templates for FitByte content generation.
 
-Each template injects brand voice, product specifics, style examples,
-and market context — ensuring outputs are brand-aligned and distinct
-from generic AI-generated content.
+This module contains all prompt engineering logic for the AI Content Creator.
 
-Techniques used (from Module 2 lessons):
-  - Role prompting (third-person persona)
-  - Few-shot examples from the actual knowledge base
-  - Chain-of-thought for brief generation
-  - Contextual placement (unique brand POV injection)
-  - Style variation (different tones per channel/audience)
-  - XML-structured output for reliable parsing
+Purpose:
+- Build structured prompts for different content types
+- Inject knowledge base context into prompts
+- Ensure outputs are brand-aligned and non-generic
+- Support style variation across channels
+
+Core idea:
+We do NOT use static prompts.
+We dynamically construct prompts using a PromptContext object.
 """
 
 from dataclasses import dataclass
 from typing import Literal
 
-Channel = Literal["blog", "instagram", "linkedin", "email_subject"]
-Audience = Literal["performance_athlete", "fitness_enthusiast", "health_professional", "upgrader", "general"]
 
+# ------------------------------------------------------------------
+# TYPE DEFINITIONS
+# ------------------------------------------------------------------
+
+# Supported output channels
+Channel = Literal["blog", "instagram", "linkedin", "email_subject"]
+
+# Supported audience segments
+Audience = Literal[
+    "performance_athlete",
+    "fitness_enthusiast",
+    "health_professional",
+    "upgrader",
+    "general",
+]
+
+
+# ------------------------------------------------------------------
+# CONTEXT OBJECT
+# ------------------------------------------------------------------
 
 @dataclass
 class PromptContext:
-    """All the context needed to build a generation prompt."""
+    """
+    Central data container for all prompt inputs.
+
+    This object is populated from the knowledge base and user input,
+    and then passed into prompt templates.
+
+    Design goal:
+    - decouple prompt logic from data loading
+    - keep templates clean and reusable
+    """
+
     topic: str
+
+    # brand-level context
+    brand_name: str = "FitByte"
+    industry: str = "fitness technology"
+
+    # generation settings
     channel: Channel = "blog"
     audience: Audience = "general"
+
+    # knowledge base inputs
     brand_voice: str = ""
     writing_rules: str = ""
     content_examples: str = ""
     product_specs: str = ""
     market_context: str = ""
     differentiators: str = ""
+
+    # optional additional control
     extra_instructions: str = ""
 
 
-# ------------------------------------------------------------------ #
-# SYSTEM PROMPTS (role definition)
-# ------------------------------------------------------------------ #
+# ------------------------------------------------------------------
+# SYSTEM PROMPTS (ROLE DEFINITIONS)
+# ------------------------------------------------------------------
 
-SYSTEM_PROMPT_WRITER = """The assistant is an expert content writer for FitByte, a precision fitness watch brand. \
-They have 10 years of experience writing health-tech content that is human, grounded and credible — never generic. \
-They have deeply internalized FitByte's brand voice: clear not clinical, motivating not preachy, \
-precise not verbose, confident not arrogant, human not robotic. \
-They never use passive voice, serial commas, fear-based messaging or unqualified superlatives. \
-Every word earns its place."""
+def build_writer_system_prompt(ctx: PromptContext) -> str:
+    """
+    Defines the "writer persona" for content generation.
 
-SYSTEM_PROMPT_ANALYST = """The assistant is a senior content strategist for FitByte. \
-They analyze topics through the lens of FitByte's audience, brand values and market positioning \
-to produce sharp, actionable content briefs. \
-They always connect product features to user benefits and know how to position FitByte \
-credibly against the market without naming competitors."""
+    This is used as the system message in the LLM call.
+    It enforces tone, style, and quality expectations.
+    """
+    return f"""
+The assistant is an expert content writer for {ctx.brand_name}, operating in the {ctx.industry} industry.
+
+They produce content that is:
+- human
+- precise
+- grounded in real context
+- non-generic
+
+They strictly follow the provided knowledge base context.
+They never invent facts.
+They avoid vague AI phrasing.
+
+Every sentence must add value.
+""".strip()
 
 
-# ------------------------------------------------------------------ #
-# TEMPLATE: CONTENT BRIEF (Step 3 of pipeline)
-# ------------------------------------------------------------------ #
+def build_analyst_system_prompt(ctx: PromptContext) -> str:
+    """
+    Defines the "analyst persona" for brief generation.
+
+    This is used in the first step of the pipeline
+    to create structured content briefs.
+    """
+    return f"""
+The assistant is a senior content strategist for {ctx.brand_name}.
+
+They:
+- analyze topics using brand and market context
+- connect product features to user value
+- produce structured, actionable content briefs
+- focus on clarity and positioning
+""".strip()
+
+
+# ------------------------------------------------------------------
+# STEP 1: CONTENT BRIEF GENERATION
+# ------------------------------------------------------------------
 
 def build_brief_prompt(ctx: PromptContext) -> str:
     """
-    Chain-of-thought prompt to generate a structured content brief.
-    Forces the model to think about angle, hook, and differentiator
-    before generating the actual post.
-    """
-    return f"""You are creating a content brief for a FitByte blog post about: "{ctx.topic}"
+    Builds a structured reasoning prompt to generate a content brief.
 
-TARGET AUDIENCE: {ctx.audience.replace("_", " ").title()}
-CHANNEL: {ctx.channel}
+    This step forces the model to:
+    - define angle
+    - define hook
+    - define core insight
+
+    before generating final content.
+
+    This improves output quality and uniqueness.
+    """
+    return f"""
+Create a structured content brief for {ctx.brand_name}.
+
+TOPIC:
+{ctx.topic}
+
+TARGET AUDIENCE:
+{ctx.audience.replace("_", " ").title()}
+
+CHANNEL:
+{ctx.channel}
 
 BRAND CONTEXT:
-{ctx.brand_voice[:1200]}
+{ctx.brand_voice[:1500]}
 
 MARKET CONTEXT:
-{ctx.market_context[:800]}
+{ctx.market_context[:1000]}
 
 PRODUCT DIFFERENTIATORS:
-{ctx.differentiators[:600]}
+{ctx.differentiators[:800]}
 
-Think step by step:
+PRODUCT FACTS:
+{ctx.product_specs[:800]}
 
-1. ANGLE: What specific angle makes this topic interesting for {ctx.audience.replace("_", " ")} readers? 
-   What's the unexpected or counter-intuitive take?
+TASK:
+Analyze the topic and define a strong content direction.
 
-2. HOOK: What opening line would stop someone mid-scroll? 
-   (FitByte style: short, human, slightly provocative)
+Return this structure:
 
-3. CORE INSIGHT: What is the one thing the reader should understand after reading this? 
-   Which FitByte feature or data point supports this concretely?
-
-4. MARKET CONTEXT: What consumer trend or pain point does this address?
-
-5. CALL TO ACTION: What low-pressure action should the reader take? 
-   (FitByte never hard-sells — end with something actionable or a quiet punchline)
-
-Return your brief in this format:
-ANGLE: [one sentence]
-HOOK: [opening line]
-CORE INSIGHT: [2-3 sentences]
-MARKET RELEVANCE: [one sentence]
-CTA: [one sentence]
-WORD COUNT TARGET: [number, 150-250 for blog]
-KEY PRODUCT REFERENCE: [which FitByte feature/metric to mention]"""
+ANGLE:
+HOOK:
+CORE INSIGHT:
+MARKET RELEVANCE:
+PRODUCT REFERENCE:
+STYLE DIRECTION:
+CALL TO ACTION OR CLOSING:
+""".strip()
 
 
-# ------------------------------------------------------------------ #
-# TEMPLATE: BLOG POST (main generation)
-# ------------------------------------------------------------------ #
+# ------------------------------------------------------------------
+# STEP 2: CONTENT GENERATION
+# ------------------------------------------------------------------
 
 def build_blog_post_prompt(ctx: PromptContext, brief: str = "") -> str:
     """
-    Few-shot + contextual placement prompt for blog post generation.
-    Uses real FitByte content examples to anchor style.
-    """
-    brief_section = f"""
-CONTENT BRIEF TO FOLLOW:
-{brief}
-""" if brief else ""
+    Builds the final blog post generation prompt.
 
-    return f"""Write a FitByte blog post about: "{ctx.topic}"
+    Combines:
+    - brief (optional)
+    - brand context
+    - product context
+    - market context
+    - style examples
+
+    This is the core prompt for content creation.
+    """
+
+    # Optional brief injection
+    brief_section = f"\nCONTENT BRIEF:\n{brief}\n" if brief else ""
+
+    return f"""
+Write a blog post for {ctx.brand_name} about:
+
+{ctx.topic}
 
 {brief_section}
 
-BRAND VOICE & WRITING RULES (follow these exactly):
+BRAND VOICE:
 {ctx.brand_voice[:1500]}
 
-VOCABULARY RULES:
-{ctx.writing_rules[:500]}
+WRITING RULES:
+{ctx.writing_rules[:800]}
 
-PRODUCT FACTS YOU CAN USE (only mention what's relevant — don't dump specs):
-{ctx.product_specs[:1000]}
-
-STYLE REFERENCE — these are real FitByte posts. Match this voice exactly:
-{ctx.content_examples[:2000]}
-
----
-
-WRITING INSTRUCTIONS:
-- Length: 150-250 words
-- Format: Heading (Title Case, punchy) + 3-4 short paragraphs
-- Voice: Second person ("you"), conversational, warm but not fluffy
-- No passive voice, no serial comma, no hype words without data
-- Lead with a human observation or relatable scenario — NOT a product feature
-- Weave in exactly ONE FitByte feature/metric naturally (don't start or end with it)
-- End with something actionable or a quiet punchline — never a hard sell
-- Every sentence must earn its place — cut anything that doesn't add meaning
-
-Write the post now. Output only the post itself — no preamble, no notes."""
-
-
-# ------------------------------------------------------------------ #
-# TEMPLATE: INSTAGRAM CAPTION
-# ------------------------------------------------------------------ #
-
-def build_instagram_prompt(ctx: PromptContext) -> str:
-    return f"""Write an Instagram caption for FitByte about: "{ctx.topic}"
-
-BRAND VOICE:
-{ctx.brand_voice[:800]}
-
-STYLE RULES FOR INSTAGRAM:
-- 1-2 lines maximum
-- Lead with the hook — no warm-up
-- Punchy, visual-first, slightly provocative
-- No emojis in the main line (FitByte is understated)
-- Optional: 1 relevant hashtag at the end
-- DO NOT start with "Did you know" or "Here's why"
-
-EXAMPLES OF GREAT FITBYTE CAPTIONS (adapt this energy):
-- "Rest days aren't lazy. They're where fitness actually happens."
-- "8 hours in bed isn't the same as 8 hours of sleep. FitByte shows you the difference."
-- "Your body knew it was getting sick before your brain did."
-
-Write exactly 1-2 lines. Output only the caption."""
-
-
-# ------------------------------------------------------------------ #
-# TEMPLATE: LINKEDIN POST
-# ------------------------------------------------------------------ #
-
-def build_linkedin_prompt(ctx: PromptContext) -> str:
-    return f"""Write a LinkedIn post for FitByte about: "{ctx.topic}"
-
-BRAND VOICE:
-{ctx.brand_voice[:800]}
+PRODUCT FACTS:
+{ctx.product_specs[:1200]}
 
 MARKET CONTEXT:
-{ctx.market_context[:600]}
+{ctx.market_context[:1000]}
 
-LINKEDIN TONE RULES:
-- Credible, data-led, professional but human
-- 100-150 words
-- Health-tech angle with workplace wellness crossover
-- Lead with a concrete insight or data point — not a question
-- One FitByte capability mentioned naturally
-- End with a thought-provoking statement (no CTA)
-- No serial comma, no passive voice
+STYLE EXAMPLES:
+{ctx.content_examples[:1800]}
 
-Output only the LinkedIn post."""
+INSTRUCTIONS:
+- 150 to 250 words
+- title plus short paragraphs
+- lead with human insight
+- include one product reference naturally
+- avoid generic phrasing
+- avoid unsupported claims
+
+Output only the blog post.
+""".strip()
 
 
-# ------------------------------------------------------------------ #
-# TEMPLATE: EMAIL SUBJECT LINES
-# ------------------------------------------------------------------ #
+def build_instagram_prompt(ctx: PromptContext) -> str:
+    """
+    Prompt for short-form, high-impact Instagram captions.
+    Focus on brevity and strong hooks.
+    """
+    return f"""
+Write an Instagram caption for {ctx.brand_name} about:
+
+{ctx.topic}
+
+RULES:
+- 1 to 2 lines
+- strong hook
+- no generic phrases
+- minimal explanation
+
+Output only the caption.
+""".strip()
+
+
+def build_linkedin_prompt(ctx: PromptContext) -> str:
+    """
+    Prompt for professional LinkedIn content.
+
+    Emphasizes:
+    - credibility
+    - business relevance
+    - structured thinking
+    """
+    return f"""
+Write a LinkedIn post for {ctx.brand_name} about:
+
+{ctx.topic}
+
+RULES:
+- 100 to 150 words
+- start with a concrete insight
+- include one product capability
+- no generic language
+- end with a strong closing
+
+Output only the post.
+""".strip()
+
 
 def build_email_subjects_prompt(ctx: PromptContext) -> str:
-    return f"""Generate 5 email subject line options for a FitByte campaign about: "{ctx.topic}"
+    """
+    Prompt for generating multiple email subject lines.
+    """
+    return f"""
+Generate 5 email subject lines for {ctx.brand_name} about:
 
-BRAND RULES:
-- Under 45 characters each
-- Lead with numbers when possible (e.g. "7 days," "3 reasons")
-- No ALL CAPS, no excessive punctuation
-- Direct, benefit-led, slightly curious
-- No spam trigger words
+{ctx.topic}
 
-Return exactly 5 options, numbered, no other text."""
+RULES:
+- under 45 characters
+- direct and benefit-led
+- no spam wording
 
-
-# ------------------------------------------------------------------ #
-# TEMPLATE: UNIQUENESS COMPARISON
-# ------------------------------------------------------------------ #
-
-GENERIC_PROMPT = "Write a short blog post about {topic} for a fitness watch brand."
-
-def build_generic_prompt(topic: str) -> str:
-    """Returns the generic baseline prompt for uniqueness comparison."""
-    return GENERIC_PROMPT.format(topic=topic)
+Return exactly 5 lines.
+""".strip()
 
 
-# ------------------------------------------------------------------ #
-# CHANNEL ROUTER
-# ------------------------------------------------------------------ #
+# ------------------------------------------------------------------
+# BASELINE PROMPT (FOR UNIQUENESS COMPARISON)
+# ------------------------------------------------------------------
+
+GENERIC_PROMPT = "Write a short blog post about {topic} for a {industry} brand."
+
+
+def build_generic_prompt(topic: str, industry: str = "fitness technology") -> str:
+    """
+    Returns a generic prompt without context.
+
+    Used to compare:
+    - generic output vs system output
+    """
+    return GENERIC_PROMPT.format(topic=topic, industry=industry)
+
+
+# ------------------------------------------------------------------
+# ROUTER
+# ------------------------------------------------------------------
 
 def get_prompt_for_channel(ctx: PromptContext, brief: str = "") -> tuple[str, str]:
     """
-    Returns (system_prompt, user_prompt) for the given channel.
+    Selects the correct prompt based on channel.
+
+    Returns:
+    (system_prompt, user_prompt)
     """
+
+    system_prompt = build_writer_system_prompt(ctx)
+
     if ctx.channel == "blog":
-        return SYSTEM_PROMPT_WRITER, build_blog_post_prompt(ctx, brief)
-    elif ctx.channel == "instagram":
-        return SYSTEM_PROMPT_WRITER, build_instagram_prompt(ctx)
-    elif ctx.channel == "linkedin":
-        return SYSTEM_PROMPT_WRITER, build_linkedin_prompt(ctx)
-    elif ctx.channel == "email_subject":
-        return SYSTEM_PROMPT_WRITER, build_email_subjects_prompt(ctx)
-    else:
-        return SYSTEM_PROMPT_WRITER, build_blog_post_prompt(ctx, brief)
+        return system_prompt, build_blog_post_prompt(ctx, brief)
+
+    if ctx.channel == "instagram":
+        return system_prompt, build_instagram_prompt(ctx)
+
+    if ctx.channel == "linkedin":
+        return system_prompt, build_linkedin_prompt(ctx)
+
+    if ctx.channel == "email_subject":
+        return system_prompt, build_email_subjects_prompt(ctx)
+
+    # fallback
+    return system_prompt, build_blog_post_prompt(ctx, brief)
 
 
-if __name__ == "__main__":
-    ctx = PromptContext(
-        topic="why your resting heart rate matters more than step count",
-        channel="blog",
-        audience="fitness_enthusiast"
-    )
-    print(build_brief_prompt(ctx)[:500])
+def get_brief_prompts(ctx: PromptContext) -> tuple[str, str]:
+    """
+    Returns prompts for the brief generation step.
+    """
+    return build_analyst_system_prompt(ctx), build_brief_prompt(ctx)
