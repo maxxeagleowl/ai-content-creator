@@ -1,0 +1,39 @@
+{
+    "name": "GreenPulse Content Creator",
+    "description": "VSCode agent configuration for AI content creation workflow",
+    "version": "1.0.0",
+    "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "editor.formatOnSave": true,
+        "python.formatting.provider": "black",
+        "files.exclude": {
+            "**/__pycache__": true,
+            "**/venv": true,
+            "**/.env": true
+        }
+    },
+    "tasks": {
+        "run_pipeline": "python src/main.py",
+        "install_deps": "pip install -r requirements.txt"
+    },
+    "extensions": {
+        "recommended": [
+            "ms-python.python",
+            "ms-python.vscode-pylance",
+            "ms-toolsai.jupyter",
+            "github.copilot"
+        ]
+    },
+    "workflow": {
+        "development": [
+            "1. Activate virtual environment",
+            "2. Install dependencies from requirements.txt",
+            "3. Configure .env with API keys",
+            "4. Run src/main.py to start pipeline",
+            "5. Test content generation",
+            "6. Compare outputs for uniqueness"
+        ]
+    }
+}
