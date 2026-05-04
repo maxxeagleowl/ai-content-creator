@@ -357,7 +357,6 @@ with gr.Blocks(css=FITBYTE_CSS, title="FitByte Content Creator") as demo:
                 lines=18,
                 max_lines=30,
                 placeholder="Your blog post will appear here. You can edit it directly before approving.",
-                show_copy_button=True,
                 elem_classes=["output-textarea"],
             )
 

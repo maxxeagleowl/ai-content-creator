@@ -1,5 +1,0 @@
-openai
-cohere
-markdown
-python-dotenv
-mistune

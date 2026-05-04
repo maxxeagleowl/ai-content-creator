@@ -1,1 +1,66 @@
-{}
+{
+  "name": "FitByte AI Content Creator",
+  "description": "VSCode agent configuration for the FitByte content generation project",
+  "version": "1.0.0",
+
+  "workspace": {
+    "root": "${workspaceFolder}",
+    "python": {
+      "defaultInterpreter": "${workspaceFolder}/venv/bin/python",
+      "analysis": {
+        "extraPaths": ["${workspaceFolder}/src"]
+      }
+    }
+  },
+
+  "tasks": {
+    "run_pipeline": {
+      "command": "python main.py --topic \"${input:topic}\" --channel ${input:channel}",
+      "description": "Run the content pipeline interactively"
+    },
+    "run_batch": {
+      "command": "python main.py --batch",
+      "description": "Run the pre-defined batch of content pieces"
+    },
+    "run_comparison": {
+      "command": "python main.py --topic \"${input:topic}\" --compare",
+      "description": "Run uniqueness comparison for a topic"
+    },
+    "test_kb": {
+      "command": "python src/knowledge_base.py",
+      "description": "Smoke-test the knowledge base loader"
+    },
+    "open_notebook": {
+      "command": "jupyter notebook fitbyte_ai_content_creator.ipynb",
+      "description": "Open the main project notebook"
+    }
+  },
+
+  "inputs": [
+    {
+      "id": "topic",
+      "type": "promptString",
+      "description": "Content topic or angle"
+    },
+    {
+      "id": "channel",
+      "type": "pickString",
+      "description": "Target channel",
+      "options": ["blog", "instagram", "linkedin", "email_subject"],
+      "default": "blog"
+    }
+  ],
+
+  "environment": {
+    "PYTHONPATH": "${workspaceFolder}/src"
+  },
+
+  "extensions": [
+    "ms-python.python",
+    "ms-toolsai.jupyter",
+    "njpwerner.autodocstring",
+    "ms-python.black-formatter"
+  ],
+
+  "notes": "Requires .env file with OPENAI_API_KEY and/or ANTHROPIC_API_KEY. See .env.example."
+}
