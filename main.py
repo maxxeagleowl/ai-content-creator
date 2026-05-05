@@ -5,11 +5,14 @@ FitByte AI Content Creator — Command Line Interface
 
 Usage examples:
 
-  # Generate a single blog post (interactive)
+  # Generate a single content piece (interactive)
   python main.py --topic "why your resting heart rate matters" --channel blog
 
   # Generate Instagram caption (auto-approve)
   python main.py --topic "winter training" --channel instagram --auto
+
+  # Generate email subject lines
+  python main.py --topic "new recovery score feature" --channel email_subject --auto
 
   # Run a batch of posts
   python main.py --batch
@@ -86,6 +89,11 @@ BATCH_REQUESTS = [
         "topic": "training load and injury prevention",
         "channel": "linkedin",
         "audience": "health_professional",
+    },
+    {
+        "topic": "improve recovery with smarter insights",
+        "channel": "email_subject",
+        "audience": "general",
     },
 ]
 

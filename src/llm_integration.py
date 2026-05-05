@@ -261,6 +261,7 @@ def get_llm_client(provider: str = "openai") -> OpenAIClient | AnthropicClient:
 
 def run_uniqueness_comparison(
     topic: str,
+    channel: str,
     fitbyte_prompt: str,
     fitbyte_system: str,
     llm: OpenAIClient | AnthropicClient,
@@ -289,13 +290,13 @@ def run_uniqueness_comparison(
 
     print("  Generating generic baseline content...")
     generic_response = llm.generate(
-        user_prompt=build_generic_prompt(topic),
+        user_prompt=build_generic_prompt(topic, channel=channel),
         system_prompt="You are a helpful assistant.",
         temperature=0.7,
     )
 
     # Auto-analysis prompt
-    analysis_prompt = f"""Compare these two blog posts about "{topic}" for a fitness watch brand.
+    analysis_prompt = f"""Compare these two {channel.replace('_', ' ')} outputs about "{topic}" for a fitness watch brand.
 
 POST A (branded system):
 {fitbyte_response.content}

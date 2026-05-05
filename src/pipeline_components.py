@@ -269,6 +269,7 @@ def run_uniqueness(topic: str, channel: str, context: dict, llm: object) -> dict
 
     return run_uniqueness_comparison(
         topic=topic,
+        channel=channel,
         fitbyte_prompt=fitbyte_prompt,
         fitbyte_system=build_writer_system_prompt(ctx),
         llm=llm,

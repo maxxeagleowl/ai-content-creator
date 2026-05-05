@@ -31,8 +31,8 @@ from knowledge_base import KnowledgeBase
 from llm_integration import get_llm_client
 from prompt_templates import (
     PromptContext,
-    build_blog_post_prompt,
     build_writer_system_prompt,
+    get_prompt_for_channel,
 )
 
 # ── INIT ──────────────────────────────────────────────────────────────
@@ -62,6 +62,29 @@ CHANNELS = {
     "Email Subject Lines":  "email_subject",
 }
 
+CHANNEL_CONFIG = {
+    "blog": {
+        "label": "blog post",
+        "max_tokens": 700,
+        "temperature": 0.75,
+    },
+    "instagram": {
+        "label": "Instagram caption",
+        "max_tokens": 180,
+        "temperature": 0.8,
+    },
+    "linkedin": {
+        "label": "LinkedIn post",
+        "max_tokens": 260,
+        "temperature": 0.7,
+    },
+    "email_subject": {
+        "label": "email subject line set",
+        "max_tokens": 140,
+        "temperature": 0.65,
+    },
+}
+
 
 # ── HELPERS ───────────────────────────────────────────────────────────
 
@@ -69,6 +92,29 @@ def word_count(text: str) -> str:
     if not text:
         return "0 words"
     return f"{len(text.split())} words"
+
+
+def get_channel_config(channel: str) -> dict:
+    return CHANNEL_CONFIG.get(channel, CHANNEL_CONFIG["blog"])
+
+
+def build_refine_prompt(current_content: str, refinement_instruction: str, state: dict) -> str:
+    channel = state.get("channel", "blog") if state else "blog"
+    channel_config = get_channel_config(channel)
+    brand_rules = state.get("writing_rules", "")[:400] if state else ""
+
+    return f"""You are editing an existing FitByte {channel_config['label']}. Apply ONLY the instruction below — keep everything else the same.
+
+CURRENT CONTENT:
+{current_content}
+
+INSTRUCTION TO APPLY:
+{refinement_instruction.strip()}
+
+BRAND RULES (do not break these):
+{brand_rules}
+
+Return ONLY the revised content — no preamble, no notes, no explanation."""
 
 
 # ── BUSINESS LOGIC ────────────────────────────────────────────────────
@@ -89,7 +135,8 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
 
     try:
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
-        channel  = CHANNELS.get(channel_label, "blog")
+        channel = CHANNELS.get(channel_label, "blog")
+        channel_config = get_channel_config(channel)
         context  = get_cached_context(topic, audience)
 
         ctx = PromptContext(
@@ -105,15 +152,16 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             extra_instructions=custom_instructions or "",
         )
 
-        blog_prompt = build_blog_post_prompt(ctx, brief="")
+        system_prompt, user_prompt = get_prompt_for_channel(ctx, brief="")
+
         if custom_instructions.strip():
-            blog_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_instructions.strip()}"
+            user_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_instructions.strip()}"
 
         response = llm.generate(
-            user_prompt=blog_prompt,
-            system_prompt=build_writer_system_prompt(ctx),
-            temperature=0.75,
-            max_tokens=500,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            temperature=channel_config["temperature"],
+            max_tokens=channel_config["max_tokens"],
             timeout=45,
         )
 
@@ -127,6 +175,7 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             "channel":       channel,
             "channel_label": channel_label,
             "audience":      audience,
+            "output_label":  channel_config["label"],
             "writing_rules": context["writing_rules"][:600],
         }
 
@@ -158,18 +207,7 @@ def refine_post(current_content, refinement_instruction, state):
         return current_content, state
 
     try:
-        refine_prompt = f"""You are editing an existing FitByte blog post. Apply ONLY the instruction below — keep everything else the same.
-
-CURRENT POST:
-{current_content}
-
-INSTRUCTION TO APPLY:
-{refinement_instruction.strip()}
-
-BRAND RULES (do not break these):
-{state.get('writing_rules', '')[:400]}
-
-Return ONLY the revised post — no preamble, no notes, no explanation."""
+        refine_prompt = build_refine_prompt(current_content, refinement_instruction, state)
 
         response = llm.generate(
             user_prompt=refine_prompt,
@@ -311,7 +349,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
     gr.HTML("""
     <div class="fb-header">
         <h1>FitByte AI Content Creator</h1>
-        <p>Generate on-brand blog posts, captions and more — powered by your knowledge bases</p>
+        <p>Generate on-brand blog posts, captions, LinkedIn posts and email subjects — powered by your knowledge bases</p>
     </div>
     """)
 
@@ -363,7 +401,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
         # ── RIGHT: Output + Refine + Approve ─────────────────────────
         with gr.Column(scale=3, min_width=400):
-            gr.HTML('<div class="fb-section-label">Generated Post — edit directly in the box</div>')
+            gr.HTML('<div class="fb-section-label">Generated Content — edit directly in the box</div>')
 
             output_box = gr.Textbox(
                 label="",

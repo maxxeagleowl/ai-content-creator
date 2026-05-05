@@ -246,6 +246,9 @@ RULES:
 - strong hook
 - no generic phrases
 - minimal explanation
+- use emojis 
+- get to the point quickly
+- use a very conversational, gen z tone
 
 Output only the caption.
 """.strip()
@@ -286,9 +289,12 @@ Generate 5 email subject lines for {ctx.brand_name} about:
 {ctx.topic}
 
 RULES:
-- under 45 characters
+- under 15 characters
 - direct and benefit-led
 - no spam wording
+- Start each with a verb (e.g. "Discover", "Unlock", "Boost")
+- End with an emoji relevant to the topic (e.g. "🚀", "💪", "📈")
+- Put Numbering on each subject line (e.g. "1. Discover...", "2. Unlock...")
 
 Return exactly 5 lines.
 """.strip()
@@ -298,17 +304,27 @@ Return exactly 5 lines.
 # BASELINE PROMPT (FOR UNIQUENESS COMPARISON)
 # ------------------------------------------------------------------
 
-GENERIC_PROMPT = "Write a short blog post about {topic} for a {industry} brand."
+GENERIC_PROMPT = {
+    "blog": "Write a short blog post about {topic} for a {industry} brand.",
+    "instagram": "Write an Instagram caption about {topic} for a {industry} brand.",
+    "linkedin": "Write a LinkedIn post about {topic} for a {industry} brand.",
+    "email_subject": "Generate 5 email subject lines about {topic} for a {industry} brand.",
+}
 
 
-def build_generic_prompt(topic: str, industry: str = "fitness technology") -> str:
+def build_generic_prompt(
+    topic: str,
+    channel: str = "blog",
+    industry: str = "fitness technology",
+) -> str:
     """
     Returns a generic prompt without context.
 
     Used to compare:
     - generic output vs system output
     """
-    return GENERIC_PROMPT.format(topic=topic, industry=industry)
+    template = GENERIC_PROMPT.get(channel, GENERIC_PROMPT["blog"])
+    return template.format(topic=topic, industry=industry)
 
 
 # ------------------------------------------------------------------
