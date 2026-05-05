@@ -12,6 +12,7 @@ Handles:
 """
 
 import os
+import re
 import time
 from typing import Callable, Optional
 from dataclasses import dataclass, field
@@ -69,7 +70,16 @@ def _usage_value(usage, field_name: str) -> int:
 
 def _trimmed_text(text: Optional[str]) -> str:
     """Normalize returned LLM text to a clean string."""
-    return (text or "").strip()
+    normalized = re.sub(r"[\u2014-]+", " ", text or "")
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _stream_text(text: Optional[str]):
+    """Yield sanitized streaming chunks."""
+    chunk = text or ""
+    if chunk:
+        normalized = re.sub(r"[\u2014-]+", " ", chunk)
+        yield re.sub(r"\s+", " ", normalized).strip()
 
 
 # ------------------------------------------------------------------ #
@@ -149,7 +159,7 @@ class OpenAIClient:
         for chunk in response:
             delta = chunk.choices[0].delta.content
             if delta:
-                yield delta
+                yield from _stream_text(delta)
 
 
 # ------------------------------------------------------------------ #
@@ -225,7 +235,7 @@ class AnthropicClient:
             temperature=temperature,
         ) as stream:
             for text in stream.text_stream:
-                yield text
+                yield from _stream_text(text)
 
 
 # ------------------------------------------------------------------ #

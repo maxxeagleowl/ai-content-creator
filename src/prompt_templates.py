@@ -39,6 +39,20 @@ Audience = Literal[
 # CONTEXT OBJECT
 # ------------------------------------------------------------------
 
+NO_EM_DASH_RULE = (
+    "Write like a real person. Avoid AI-sounding phrasing. "
+    "Never use the em dash character — in any output; use a comma, colon, semicolon, or a plain hyphen instead."
+)
+
+NO_HYPHEN_RULE = (
+    "Write in full sentences only. "
+    "Do not use the hyphen character `-`, bullet points, or list formatting."
+)
+
+def _append_output_rule(prompt: str) -> str:
+    """Attach the shared output-style rule to a prompt."""
+    return f"{prompt}\n\nOUTPUT RULE:\n{NO_EM_DASH_RULE}"
+
 @dataclass
 class PromptContext:
     """
@@ -97,6 +111,8 @@ They produce content that is:
 They strictly follow the provided knowledge base context.
 They never invent facts.
 They avoid vague AI phrasing.
+{NO_EM_DASH_RULE}
+{NO_HYPHEN_RULE if ctx.channel in ('blog', 'linkedin') else ''}
 
 Every sentence must add value.
 """.strip()
@@ -137,7 +153,7 @@ def build_brief_prompt(ctx: PromptContext) -> str:
 
     This improves output quality and uniqueness.
     """
-    return f"""
+    return _append_output_rule(f"""
 Create a structured content brief for {ctx.brand_name}.
 
 TOPIC:
@@ -173,7 +189,7 @@ MARKET RELEVANCE:
 PRODUCT REFERENCE:
 STYLE DIRECTION:
 CALL TO ACTION OR CLOSING:
-""".strip()
+""".strip())
 
 
 # ------------------------------------------------------------------
@@ -197,7 +213,7 @@ def build_blog_post_prompt(ctx: PromptContext, brief: str = "") -> str:
     # Optional brief injection
     brief_section = f"\nCONTENT BRIEF:\n{brief}\n" if brief else ""
 
-    return f"""
+    return _append_output_rule(f"""
 Write a blog post for {ctx.brand_name} about:
 
 {ctx.topic}
@@ -228,7 +244,8 @@ INSTRUCTIONS:
 - avoid unsupported claims
 
 Output only the blog post.
-""".strip()
+{NO_HYPHEN_RULE}
+""".strip())
 
 
 def build_instagram_prompt(ctx: PromptContext) -> str:
@@ -236,7 +253,7 @@ def build_instagram_prompt(ctx: PromptContext) -> str:
     Prompt for short-form, high-impact Instagram captions.
     Focus on brevity and strong hooks.
     """
-    return f"""
+    return _append_output_rule(f"""
 Write an Instagram caption for {ctx.brand_name} about:
 
 {ctx.topic}
@@ -251,7 +268,7 @@ RULES:
 - use a very conversational, gen z tone
 
 Output only the caption.
-""".strip()
+""".strip())
 
 
 def build_linkedin_prompt(ctx: PromptContext) -> str:
@@ -263,7 +280,7 @@ def build_linkedin_prompt(ctx: PromptContext) -> str:
     - business relevance
     - structured thinking
     """
-    return f"""
+    return _append_output_rule(f"""
 Write a LinkedIn post for {ctx.brand_name} about:
 
 {ctx.topic}
@@ -276,14 +293,15 @@ RULES:
 - end with a strong closing
 
 Output only the post.
-""".strip()
+{NO_HYPHEN_RULE}
+""".strip())
 
 
 def build_email_subjects_prompt(ctx: PromptContext) -> str:
     """
     Prompt for generating multiple email subject lines.
     """
-    return f"""
+    return _append_output_rule(f"""
 Generate 5 email subject lines for {ctx.brand_name} about:
 
 {ctx.topic}
@@ -297,7 +315,7 @@ RULES:
 - Put Numbering on each subject line (e.g. "1. Discover...", "2. Unlock...")
 
 Return exactly 5 lines.
-""".strip()
+""".strip())
 
 
 # ------------------------------------------------------------------
