@@ -10,6 +10,7 @@ Provides clean accessor methods so the pipeline always gets
 the right context without worrying about file paths.
 """
 
+import re
 from pathlib import Path
 from document_processor import load_and_clean, load_file, truncate, extract_section
 
@@ -177,9 +178,6 @@ class KnowledgeBase:
             "differentiators": self.competitor_context(),
             "audience_insights": self.audience_pain_points(),
         }
-
-
-import re  # needed by content_examples — imported at module level below
 
 
 if __name__ == "__main__":

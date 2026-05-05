@@ -66,58 +66,73 @@ def generate_post(topic, audience_label, channel_label, custom_instructions, pro
         gr.Warning("Please enter a topic before generating.")
         return "", gr.update(visible=False), gr.update(visible=False)
 
-    audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
-    channel = CHANNELS.get(channel_label, "blog")
+    try:
+        audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
+        channel = CHANNELS.get(channel_label, "blog")
 
-    progress(0.15, desc="Loading knowledge bases...")
-    context = kb.full_context_for_generation(topic=topic, audience=audience)
+        progress(0.15, desc="Loading knowledge bases...")
+        context = kb.full_context_for_generation(topic=topic, audience=audience)
 
-    progress(0.40, desc="Generating content brief...")
-    ctx = PromptContext(
-        topic=topic,
-        channel=channel,
-        audience=audience,
-        brand_voice=context["brand_voice"],
-        writing_rules=context["writing_rules"],
-        content_examples=context["content_examples"],
-        product_specs=context["product_specs"],
-        market_context=context["market_context"],
-        differentiators=context["differentiators"],
-        extra_instructions=custom_instructions or "",
-    )
+        progress(0.40, desc="Generating content brief...")
+        ctx = PromptContext(
+            topic=topic,
+            channel=channel,
+            audience=audience,
+            brand_voice=context["brand_voice"],
+            writing_rules=context["writing_rules"],
+            content_examples=context["content_examples"],
+            product_specs=context["product_specs"],
+            market_context=context["market_context"],
+            differentiators=context["differentiators"],
+            extra_instructions=custom_instructions or "",
+        )
 
-    brief_response = llm.generate(
-        user_prompt=build_brief_prompt(ctx),
-        system_prompt=build_analyst_system_prompt(ctx),
-        temperature=0.4,
-        max_tokens=600,
-    )
+        brief_response = llm.generate(
+            user_prompt=build_brief_prompt(ctx),
+            system_prompt=build_analyst_system_prompt(ctx),
+            temperature=0.4,
+            max_tokens=600,
+        )
 
-    progress(0.70, desc="Writing the blog post...")
+        if not brief_response or not brief_response.content.strip():
+            gr.Error("Failed to generate brief. Please try again.")
+            return "", gr.update(visible=False), gr.update(visible=False)
+
+        progress(0.70, desc="Writing the blog post...")
+        
+        # Inject custom instructions into the generation prompt
+        extra = ""
+        if custom_instructions.strip():
+            extra = f"\n\nADDITIONAL INSTRUCTIONS FROM CLIENT:\n{custom_instructions.strip()}\nFollow these on top of everything else."
+
+        blog_prompt = build_blog_post_prompt(ctx, brief=brief_response.content) + extra
+
+        content_response = llm.generate(
+            user_prompt=blog_prompt,
+            system_prompt=build_writer_system_prompt(ctx),
+            temperature=0.75,
+            max_tokens=900,
+        )
+
+        if not content_response or not content_response.content.strip():
+            gr.Error("Failed to generate blog post. Please try again.")
+            return "", gr.update(visible=False), gr.update(visible=False)
+
+        progress(1.0, desc="Done!")
+
+        content = content_response.content.strip()
+
+        return (
+            content,
+            gr.update(visible=True),   # show refinement row
+            gr.update(visible=True),   # show approve row
+        )
     
-    # Inject custom instructions into the generation prompt
-    extra = ""
-    if custom_instructions.strip():
-        extra = f"\n\nADDITIONAL INSTRUCTIONS FROM CLIENT:\n{custom_instructions.strip()}\nFollow these on top of everything else."
-
-    blog_prompt = build_blog_post_prompt(ctx, brief=brief_response.content) + extra
-
-    content_response = llm.generate(
-        user_prompt=blog_prompt,
-        system_prompt=build_writer_system_prompt(ctx),
-        temperature=0.75,
-        max_tokens=900,
-    )
-
-    progress(1.0, desc="Done!")
-
-    content = content_response.content.strip()
-
-    return (
-        content,
-        gr.update(visible=True),   # show refinement row
-        gr.update(visible=True),   # show approve row
-    )
+    except Exception as e:
+        error_msg = str(e)
+        print(f"ERROR in generate_post: {error_msg}")
+        gr.Error(f"Error generating content: {error_msg[:100]}")
+        return "", gr.update(visible=False), gr.update(visible=False)
 
 
 def refine_post(current_content, refinement_instruction, topic, audience_label, channel_label):
@@ -131,11 +146,12 @@ def refine_post(current_content, refinement_instruction, topic, audience_label, 
         gr.Warning("Enter a refinement instruction.")
         return current_content
 
-    audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
-    channel  = CHANNELS.get(channel_label, "blog")
-    context  = kb.full_context_for_generation(topic=topic, audience=audience)
+    try:
+        audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
+        channel  = CHANNELS.get(channel_label, "blog")
+        context  = kb.full_context_for_generation(topic=topic, audience=audience)
 
-    refine_prompt = f"""You are editing an existing FitByte blog post. Apply ONLY the instruction below — keep everything else the same.
+        refine_prompt = f"""You are editing an existing FitByte blog post. Apply ONLY the instruction below — keep everything else the same.
 
 CURRENT POST:
 {current_content}
@@ -148,15 +164,26 @@ BRAND RULES (do not break these):
 
 Return ONLY the revised post — no preamble, no notes, no explanation."""
 
-    response = llm.generate(
-        user_prompt=refine_prompt,
-        system_prompt=build_writer_system_prompt(
-            PromptContext(topic=topic, channel=channel, audience=audience)
-        ),
-        temperature=0.65,
-        max_tokens=900,
-    )
-    return response.content.strip()
+        response = llm.generate(
+            user_prompt=refine_prompt,
+            system_prompt=build_writer_system_prompt(
+                PromptContext(topic=topic, channel=channel, audience=audience)
+            ),
+            temperature=0.65,
+            max_tokens=900,
+        )
+        
+        if not response or not response.content.strip():
+            gr.Error("Failed to refine post. Please try again.")
+            return current_content
+        
+        return response.content.strip()
+    
+    except Exception as e:
+        error_msg = str(e)
+        print(f"ERROR in refine_post: {error_msg}")
+        gr.Error(f"Error refining post: {error_msg[:100]}")
+        return current_content
 
 
 def approve_and_download(content, topic, channel_label):
@@ -166,24 +193,32 @@ def approve_and_download(content, topic, channel_label):
         gr.Warning("Nothing to download — generate a post first.")
         return None
 
-    channel = CHANNELS.get(channel_label, "blog")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = re.sub(r"[^a-z0-9]+", "_", topic.lower().strip())[:40]
-    filename = f"fitbyte_{channel}_{slug}_{timestamp}.txt"
+    try:
+        channel = CHANNELS.get(channel_label, "blog")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        slug = re.sub(r"[^a-z0-9]+", "_", topic.lower().strip())[:40]
+        filename = f"fitbyte_{channel}_{slug}_{timestamp}.txt"
 
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False,
-        prefix=f"fitbyte_{channel}_"
-    )
-    tmp.write(f"FitByte Content — Approved\n")
-    tmp.write(f"Topic:   {topic}\n")
-    tmp.write(f"Channel: {channel_label}\n")
-    tmp.write(f"Date:    {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-    tmp.write("\n" + "=" * 60 + "\n\n")
-    tmp.write(content)
-    tmp.close()
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False,
+            prefix=f"fitbyte_{channel}_"
+        )
+        tmp.write(f"FitByte Content — Approved\n")
+        tmp.write(f"Topic:   {topic}\n")
+        tmp.write(f"Channel: {channel_label}\n")
+        tmp.write(f"Date:    {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+        tmp.write("\n" + "=" * 60 + "\n\n")
+        tmp.write(content)
+        tmp.close()
 
-    return tmp.name
+        gr.Info(f"File saved successfully!")
+        return tmp.name
+    
+    except Exception as e:
+        error_msg = str(e)
+        print(f"ERROR in approve_and_download: {error_msg}")
+        gr.Error(f"Error saving file: {error_msg[:100]}")
+        return None
 
 
 def word_count(text):
@@ -256,12 +291,17 @@ FITBYTE_CSS = """
     line-height: 1.7 !important;
     border-radius: 10px !important;
     border: 1.5px solid #E5E7EB !important;
-    background: #FAFAFA !important;
+    background: white !important;
+    color: #000000 !important;
 }
 .output-textarea textarea:focus {
     border-color: #1A56DB !important;
     background: white !important;
+    color: #000000 !important;
     box-shadow: 0 0 0 3px rgba(26,86,219,0.08) !important;
+}
+.output-textarea textarea::placeholder {
+    color: #999999 !important;
 }
 
 /* ── Refinement box ── */
@@ -294,7 +334,7 @@ FITBYTE_CSS = """
 
 # ── UI ────────────────────────────────────────────────────────────────
 
-with gr.Blocks(css=FITBYTE_CSS, title="FitByte Content Creator") as demo:
+with gr.Blocks(title="FitByte Content Creator") as demo:
 
     # ── Header ──────────────────────────────────────────────────────
     gr.HTML("""
@@ -360,6 +400,7 @@ with gr.Blocks(css=FITBYTE_CSS, title="FitByte Content Creator") as demo:
                 max_lines=30,
                 placeholder="Your blog post will appear here. You can edit it directly before approving.",
                 elem_classes=["output-textarea"],
+                interactive=True,
             )
 
             word_count_display = gr.Markdown("", elem_id="wc")
@@ -434,4 +475,4 @@ if __name__ == "__main__":
     print("  ──────────────────────────")
     print(f"  LLM: {llm.__class__.__name__} / {llm.model}")
     print("  Open: http://localhost:7860\n")
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=False, css=FITBYTE_CSS)
