@@ -65,6 +65,7 @@ class OpenAIClient:
         temperature: float = 0.7,
         max_tokens: int = 800,
         max_retries: int = 3,
+        timeout: int = 60,
     ) -> LLMResponse:
         """Send a prompt and return an LLMResponse."""
 
@@ -78,6 +79,7 @@ class OpenAIClient:
                     ],
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    timeout=timeout,
                 )
 
                 usage = response.usage
@@ -128,6 +130,7 @@ class AnthropicClient:
         temperature: float = 0.7,
         max_tokens: int = 800,
         max_retries: int = 3,
+        timeout: int = 60,
     ) -> LLMResponse:
         """Send a prompt and return an LLMResponse."""
 
@@ -139,6 +142,7 @@ class AnthropicClient:
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
                     temperature=temperature,
+                    timeout=timeout,
                 )
 
                 usage = response.usage

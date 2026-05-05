@@ -42,6 +42,16 @@ from prompt_templates import (
 kb = KnowledgeBase()
 llm = get_llm_client(provider="auto")
 
+# Cache for knowledge base contexts to avoid reloading
+_kb_cache = {}
+
+def get_cached_context(topic, audience):
+    """Return cached KB context or generate and cache it."""
+    cache_key = f"{topic}:{audience}"
+    if cache_key not in _kb_cache:
+        _kb_cache[cache_key] = kb.full_context_for_generation(topic=topic, audience=audience)
+    return _kb_cache[cache_key]
+
 AUDIENCES = {
     "Fitness Enthusiast": "fitness_enthusiast",
     "Performance Athlete": "performance_athlete",
@@ -60,20 +70,22 @@ CHANNELS = {
 # ── GENERATION LOGIC ──────────────────────────────────────────────────
 
 def generate_post(topic, audience_label, channel_label, custom_instructions, progress=gr.Progress()):
-    """Full pipeline: document → brief → publish. Returns generated content."""
-
+    """Generate content and show all UI elements."""
+    
     if not topic.strip():
         gr.Warning("Please enter a topic before generating.")
-        return "", gr.update(visible=False), gr.update(visible=False)
+        return "", gr.update(visible=False), gr.update(visible=False), gr.update(value=""), gr.update(value="0 words")
 
     try:
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
         channel = CHANNELS.get(channel_label, "blog")
 
-        progress(0.15, desc="Loading knowledge bases...")
-        context = kb.full_context_for_generation(topic=topic, audience=audience)
+        progress(0.20, desc="Loading knowledge bases...")
+        context = get_cached_context(topic, audience)  # Use cached KB
 
-        progress(0.40, desc="Generating content brief...")
+        progress(0.50, desc="Generating content...")
+        
+        # Build context with brief generation skipped for speed
         ctx = PromptContext(
             topic=topic,
             channel=channel,
@@ -87,52 +99,50 @@ def generate_post(topic, audience_label, channel_label, custom_instructions, pro
             extra_instructions=custom_instructions or "",
         )
 
-        brief_response = llm.generate(
-            user_prompt=build_brief_prompt(ctx),
-            system_prompt=build_analyst_system_prompt(ctx),
-            temperature=0.4,
-            max_tokens=600,
-        )
-
-        if not brief_response or not brief_response.content.strip():
-            gr.Error("Failed to generate brief. Please try again.")
-            return "", gr.update(visible=False), gr.update(visible=False)
-
-        progress(0.70, desc="Writing the blog post...")
+        # OPTIMIZED: Skip brief generation and go straight to content
+        # Use a simplified prompt that includes key brief elements inline
+        blog_prompt = build_blog_post_prompt(ctx, brief="")  # No separate brief
         
         # Inject custom instructions into the generation prompt
-        extra = ""
         if custom_instructions.strip():
-            extra = f"\n\nADDITIONAL INSTRUCTIONS FROM CLIENT:\n{custom_instructions.strip()}\nFollow these on top of everything else."
+            blog_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_instructions.strip()}"
 
-        blog_prompt = build_blog_post_prompt(ctx, brief=brief_response.content) + extra
-
+        # Single LLM call with reduced max_tokens for faster response
         content_response = llm.generate(
             user_prompt=blog_prompt,
             system_prompt=build_writer_system_prompt(ctx),
             temperature=0.75,
-            max_tokens=900,
+            max_tokens=500,  # Reduced from 900 for faster generation
+            timeout=45  # Add explicit timeout
         )
 
         if not content_response or not content_response.content.strip():
-            gr.Error("Failed to generate blog post. Please try again.")
-            return "", gr.update(visible=False), gr.update(visible=False)
+            gr.Error("Failed to generate content. Please try again.")
+            return "", gr.update(visible=False), gr.update(visible=False), gr.update(value=""), gr.update(value="0 words")
 
         progress(1.0, desc="Done!")
 
         content = content_response.content.strip()
 
+        # Update word count and clear refine input
+        word_count_text = word_count(content)
+        
         return (
             content,
             gr.update(visible=True),   # show refinement row
             gr.update(visible=True),   # show approve row
+            gr.update(value=""),      # clear refine input
+            gr.update(value=word_count_text),  # update word count
         )
     
+    except TimeoutError:
+        gr.Error("Request timed out. Please try again with a shorter topic or simpler instructions.")
+        return "", gr.update(visible=False), gr.update(visible=False), gr.update(value=""), gr.update(value="0 words")
     except Exception as e:
         error_msg = str(e)
         print(f"ERROR in generate_post: {error_msg}")
         gr.Error(f"Error generating content: {error_msg[:100]}")
-        return "", gr.update(visible=False), gr.update(visible=False)
+        return "", gr.update(visible=False), gr.update(visible=False), gr.update(value=""), gr.update(value="0 words")
 
 
 def refine_post(current_content, refinement_instruction, topic, audience_label, channel_label):
@@ -149,7 +159,7 @@ def refine_post(current_content, refinement_instruction, topic, audience_label, 
     try:
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
         channel  = CHANNELS.get(channel_label, "blog")
-        context  = kb.full_context_for_generation(topic=topic, audience=audience)
+        context  = get_cached_context(topic, audience)
 
         refine_prompt = f"""You are editing an existing FitByte blog post. Apply ONLY the instruction below — keep everything else the same.
 
@@ -160,7 +170,7 @@ INSTRUCTION TO APPLY:
 {refinement_instruction.strip()}
 
 BRAND RULES (do not break these):
-{context['writing_rules'][:600]}
+{context['writing_rules'][:400]}
 
 Return ONLY the revised post — no preamble, no notes, no explanation."""
 
@@ -170,7 +180,8 @@ Return ONLY the revised post — no preamble, no notes, no explanation."""
                 PromptContext(topic=topic, channel=channel, audience=audience)
             ),
             temperature=0.65,
-            max_tokens=900,
+            max_tokens=600,
+            timeout=45,
         )
         
         if not response or not response.content.strip():
@@ -179,6 +190,9 @@ Return ONLY the revised post — no preamble, no notes, no explanation."""
         
         return response.content.strip()
     
+    except TimeoutError:
+        gr.Error("Refinement timed out. Please try a simpler instruction.")
+        return current_content
     except Exception as e:
         error_msg = str(e)
         print(f"ERROR in refine_post: {error_msg}")
@@ -335,6 +349,7 @@ FITBYTE_CSS = """
 # ── UI ────────────────────────────────────────────────────────────────
 
 with gr.Blocks(title="FitByte Content Creator") as demo:
+    demo.queue()
 
     # ── Header ──────────────────────────────────────────────────────
     gr.HTML("""
@@ -441,18 +456,12 @@ with gr.Blocks(title="FitByte Content Creator") as demo:
 
     # ── EVENT WIRING ─────────────────────────────────────────────────
 
-    # Update word count whenever output changes
-    output_box.change(
-        fn=word_count,
-        inputs=[output_box],
-        outputs=[word_count_display],
-    )
-
     # Generate button
     generate_btn.click(
         fn=generate_post,
         inputs=[topic_input, audience_input, channel_input, custom_input],
-        outputs=[output_box, refine_row, approve_row],
+        outputs=[output_box, refine_row, approve_row, refine_input, word_count_display],
+        queue=True,
     )
 
     # Refine button
@@ -460,6 +469,7 @@ with gr.Blocks(title="FitByte Content Creator") as demo:
         fn=refine_post,
         inputs=[output_box, refine_input, topic_input, audience_input, channel_input],
         outputs=[output_box],
+        queue=True,
     )
 
     # Approve → download
@@ -467,6 +477,7 @@ with gr.Blocks(title="FitByte Content Creator") as demo:
         fn=approve_and_download,
         inputs=[output_box, topic_input, channel_input],
         outputs=[download_file],
+        queue=False,
     )
 
 
@@ -475,4 +486,10 @@ if __name__ == "__main__":
     print("  ──────────────────────────")
     print(f"  LLM: {llm.__class__.__name__} / {llm.model}")
     print("  Open: http://localhost:7860\n")
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False, css=FITBYTE_CSS)
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,
+        css=FITBYTE_CSS,
+        show_error=True,
+    )
