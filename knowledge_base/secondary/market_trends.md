@@ -80,6 +80,13 @@ The global fitness tracker market is projected to reach $91.3B by 2027. Growth i
 | Health-conscious professional | Battery dying mid-day | 14-day battery (Pro) |
 | Upgrader | Learning curve switching devices | Clean onboarding, no manual needed |
 
+| Segment | Age | Tone | Lead with | Words that resonate | Words to avoid | Core fear | Core desire | Top pain point | FitByte response |
+|---|---|---|---|---|---|---|---|---|---|
+| Performance athlete | 22–40 | Technical, peer-to-peer | GPS accuracy data | track, precision, signal lock, race-ready, tested, dual-band | lifestyle, wellness, journey, game-changer | Bad data mid-race | Total data trust | GPS accuracy in cities/forests | Dual-frequency GPS (Pro/Ultra) |
+| Fitness enthusiast | 25–45 | Warm, encouraging | One clear daily answer | clear, simple, no guesswork, one number, stay on track, built for real life | granular, physiological, periodisation, deep-dive | Not knowing what to do | Clarity and guidance | Overwhelming data, don't know what to act on | Recovery Score + 5 key metrics |
+| Health-conscious professional | 30–50 | Confident, understated | Battery reliability | reliable, always on, 14 days, one less thing to think about, no charging anxiety | crush it, beast mode, hustle, grind, gains | Dead watch mid-day | Effortless reliability | Battery dying mid-day | 14-day battery (Pro) |
+| Upgrader | 28–50 | Reassuring, specific | Frictionless setup | no manual needed, set up in minutes, intuitive, familiar, ready for your first workout | revolutionary, disrupts, complex, advanced setup | Repeating a painful switch | Confidence from day one | Learning curve switching devices | Clean onboarding, no manual needed |
+
 ---
 
 ## Content Themes That Perform (Industry Data)

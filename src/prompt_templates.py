@@ -46,7 +46,7 @@ NO_EM_DASH_RULE = (
 
 NO_HYPHEN_RULE = (
     "Write in full sentences only. "
-    "Do not use the hyphen character `-`, bullet points, or list formatting."
+    "Do not use the hyphen character `-`."
 )
 
 def _append_output_rule(prompt: str) -> str:
@@ -311,11 +311,14 @@ AUDIENCE INSIGHTS:
 {ctx.audience_insights[:800]}
 
 RULES:
-- 100 to 150 words
+- 250 to 350 words
 - start with a concrete insight
+- craft a powerful hook that speaks to target audience pain points
 - include one product capability
 - no generic language
-- end with a strong closing
+- have a numbered list of 3 key takeaways that are relevant to the audience
+- end with a strong closing and a call to action (e.g. "What do you think?", "How are you approaching this?")
+- include 3-5 relevant hashtags at the end
 
 Output only the post.
 {NO_HYPHEN_RULE}
