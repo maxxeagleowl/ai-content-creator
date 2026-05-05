@@ -10,8 +10,10 @@ Provides clean accessor methods so the pipeline always gets
 the right context without worrying about file paths.
 """
 
+import re
 from pathlib import Path
-from document_processor import load_and_clean, load_file, truncate, extract_section
+
+from document_processor import load_and_clean, load_file, truncate, extract_section, strip_markdown
 
 
 KB_ROOT = Path(__file__).parent.parent / "knowledge_base"
@@ -33,12 +35,51 @@ class KnowledgeBase:
         self.primary = kb_root / "primary"
         self.secondary = kb_root / "secondary"
         self._cache: dict[str, str] = {}
+        self._raw_cache: dict[str, str] = {}
 
     def _load(self, path: Path) -> str:
         key = str(path)
         if key not in self._cache:
             self._cache[key] = load_and_clean(path)
         return self._cache[key]
+
+    def _load_raw(self, path: Path) -> str:
+        """Load raw markdown once and reuse it across section extractors."""
+        key = str(path)
+        if key not in self._raw_cache:
+            self._raw_cache[key] = load_file(path)
+        return self._raw_cache[key]
+
+    @staticmethod
+    def _bundle_sections(raw: str, sections: list[str], fallback: str = "") -> str:
+        """Return a compact block of named sections from a markdown document."""
+        parts = []
+        for section in sections:
+            content = extract_section(raw, section)
+            if content:
+                parts.append(f"[{section}]\n{content}")
+        return "\n\n".join(parts) if parts else fallback
+
+    @staticmethod
+    def _select_diverse_posts(posts: list[str], n: int) -> list[str]:
+        """Pick a small, varied sample of posts for prompt injection."""
+        if n <= 0:
+            return []
+        if n >= len(posts):
+            return posts
+        if n == 1:
+            return [posts[0]]
+        if n == 2:
+            return [posts[0], posts[-1]]
+
+        selected = []
+        for idx in [0, len(posts) // 2, len(posts) - 1]:
+            post = posts[idx]
+            if post not in selected:
+                selected.append(post)
+            if len(selected) == n:
+                break
+        return selected
 
     # ------------------------------------------------------------------ #
     # PRIMARY KNOWLEDGE BASE
@@ -49,28 +90,15 @@ class KnowledgeBase:
         Returns the brand voice and writing rules section —
         the most important context for tone and style.
         """
-        raw = load_file(self.primary / "fitbyte_brand_guidelines.md")
-
-        # Pull the most useful sections for prompt injection
+        raw = self._load_raw(self.primary / "fitbyte_brand_guidelines.md")
         sections = ["Our Voice", "Writing Rules", "Words We Use", "Tone by Channel", "What We Never Do"]
-        parts = []
-        for s in sections:
-            content = extract_section(raw, s)
-            if content:
-                parts.append(f"[{s}]\n{content}")
-
-        return "\n\n".join(parts) if parts else self._load(self.primary / "fitbyte_brand_guidelines.md")
+        return self._bundle_sections(raw, sections, fallback=self._load(self.primary / "fitbyte_brand_guidelines.md"))
 
     def brand_identity(self) -> str:
         """Returns the Who We Are + one-liner + audience descriptions."""
-        raw = load_file(self.primary / "fitbyte_brand_guidelines.md")
+        raw = self._load_raw(self.primary / "fitbyte_brand_guidelines.md")
         sections = ["Who We Are", "Our Audience", "How to Talk About FitByte"]
-        parts = []
-        for s in sections:
-            content = extract_section(raw, s)
-            if content:
-                parts.append(f"[{s}]\n{content}")
-        return "\n\n".join(parts) if parts else ""
+        return self._bundle_sections(raw, sections)
 
     def product_specs(self, model: str = "all") -> str:
         """
@@ -91,28 +119,22 @@ class KnowledgeBase:
         Returns n example blog posts as style reference.
         Selects a diverse sample: recovery, sleep, and a seasonal/motivational post.
         """
-        raw = load_file(self.primary / "past_content" / "fitbyte_content_examples.md")
+        raw = self._load_raw(self.primary / "past_content" / "fitbyte_content_examples.md")
 
         # Extract individual posts by splitting on ## Post
         posts = re.split(r"(?=^## Post)", raw, flags=re.MULTILINE)
         posts = [p.strip() for p in posts if p.strip() and "## Post" in p]
 
         # Select a diverse sample
-        if n >= len(posts):
-            selected = posts
-        else:
-            # Pick first, middle, last for variety
-            indices = [0, len(posts) // 2, -1][:n]
-            selected = [posts[i] for i in indices]
+        selected = self._select_diverse_posts(posts, n)
 
         # Clean markdown for LLM injection
-        from document_processor import strip_markdown
         cleaned = [strip_markdown(p) for p in selected]
         return "\n\n---\n\n".join(cleaned)
 
     def writing_rules(self) -> str:
         """Returns a compact cheat sheet of FitByte's do/don't writing rules."""
-        raw = load_file(self.primary / "fitbyte_brand_guidelines.md")
+        raw = self._load_raw(self.primary / "fitbyte_brand_guidelines.md")
         rules = extract_section(raw, "Brand Voice Cheat Sheet")
         words = extract_section(raw, "Words We Use")
         parts = []
@@ -148,7 +170,7 @@ class KnowledgeBase:
 
     def audience_pain_points(self) -> str:
         """Returns audience pain points from market research."""
-        raw = load_file(self.secondary / "market_trends.md")
+        raw = self._load_raw(self.secondary / "market_trends.md")
         pain = extract_section(raw, "Audience Pain Points (Research Findings)")
         trends = extract_section(raw, "Key Consumer Trends")
         parts = []
@@ -177,10 +199,6 @@ class KnowledgeBase:
             "differentiators": self.competitor_context(),
             "audience_insights": self.audience_pain_points(),
         }
-
-
-import re  # needed by content_examples — imported at module level below
-
 
 if __name__ == "__main__":
     kb = KnowledgeBase()

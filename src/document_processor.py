@@ -6,7 +6,6 @@ Extracts sections, strips markdown syntax, and returns clean text
 ready to be injected into LLM prompts.
 """
 
-import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -57,10 +56,18 @@ def extract_section(content: str, section_heading: str) -> Optional[str]:
     if not match:
         return None
 
+    heading_level = len(re.match(r"^(#{1,6})\s+", match.group(0)).group(1))
     start = match.end()
-    # Find the next heading of same or higher level
-    next_heading = re.search(r"^#{1,6}\s+", content[start:], re.MULTILINE)
-    end = start + next_heading.start() if next_heading else len(content)
+
+    # End the section at the next heading with the same or higher priority.
+    # Lower heading levels use fewer # characters, so we only stop at headings
+    # with a level less than or equal to the current one.
+    end = len(content)
+    for line_match in re.finditer(r"^(#{1,6})\s+.*$", content[start:], re.MULTILINE):
+        next_level = len(line_match.group(1))
+        if next_level <= heading_level:
+            end = start + line_match.start()
+            break
 
     return strip_markdown(content[start:end]).strip()
 
