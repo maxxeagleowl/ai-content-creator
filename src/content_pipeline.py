@@ -130,49 +130,108 @@ class ContentPipeline:
         audience: str = "fitness_enthusiast",
         auto_approve: bool = False,
     ) -> dict:
-        """Run the full pipeline end-to-end."""
+        """Run the full pipeline end-to-end with comprehensive error handling."""
         self._header(topic, channel, audience)
+        
+        try:
+            # Validate inputs
+            if not topic or not topic.strip():
+                raise ValueError("Topic cannot be empty")
+            if channel not in ["blog", "instagram", "linkedin", "email_subject"]:
+                raise ValueError(f"Invalid channel: {channel}")
+            if audience not in ["performance_athlete", "fitness_enthusiast", "health_professional", "upgrader", "general"]:
+                raise ValueError(f"Invalid audience: {audience}")
 
-        context = self.document(topic, audience)
-        monitor_report = self.monitor(topic, context)
-        content_brief = self.brief(topic, channel, audience, context)
-        content = self.publish(topic, channel, audience, context, content_brief)
+            context = self.document(topic, audience)
+            if not context or not any(context.values()):
+                raise RuntimeError("Failed to load knowledge base context")
+            
+            monitor_report = self.monitor(topic, context)
+            content_brief = self.brief(topic, channel, audience, context)
+            
+            if not content_brief or not content_brief.strip():
+                raise RuntimeError("Failed to generate content brief")
+            
+            content = self.publish(topic, channel, audience, context, content_brief)
+            
+            if not content or not content.strip():
+                raise RuntimeError(f"Failed to generate {channel} content")
 
-        if auto_approve:
-            self.outputs.save_content(content, topic, channel)
-            final_content = content
-        else:
-            current_content = content
-            while True:
-                final_content = self.iterate(current_content, topic, channel)
-                if final_content != "__REGENERATE__":
-                    break
+            if auto_approve:
+                self.outputs.save_content(content, topic, channel)
+                final_content = content
+            else:
+                current_content = content
+                while True:
+                    final_content = self.iterate(current_content, topic, channel)
+                    if final_content != "__REGENERATE__":
+                        break
 
-                self._log("  Regenerating...")
-                current_content = self.publish(topic, channel, audience, context, content_brief)
+                    self._log("  Regenerating...")
+                    current_content = self.publish(topic, channel, audience, context, content_brief)
 
-        return {
-            "topic": topic,
-            "channel": channel,
-            "audience": audience,
-            "brief": content_brief,
-            "content": final_content,
-            "monitor_report": monitor_report,
-        }
+            return {
+                "topic": topic,
+                "channel": channel,
+                "audience": audience,
+                "brief": content_brief,
+                "content": final_content,
+                "monitor_report": monitor_report,
+                "error": None,
+            }
+            
+        except ValueError as e:
+            self._log(f"  ✗ Validation error: {e}")
+            return {"error": str(e), "topic": topic, "channel": channel}
+        except RuntimeError as e:
+            self._log(f"  ✗ Pipeline error: {e}")
+            return {"error": str(e), "topic": topic, "channel": channel}
+        except Exception as e:
+            error_msg = f"Unexpected error: {str(e)[:120]}"
+            self._log(f"  ✗ {error_msg}")
+            return {"error": error_msg, "topic": topic, "channel": channel}
 
     # ------------------------------------------------------------------ #
     # BATCH MODE
     # ------------------------------------------------------------------ #
 
     def run_batch(self, requests: list[dict]) -> list[dict]:
-        """Run multiple content requests without human review."""
+        """Run multiple content requests without human review, with error recovery."""
+        if not requests:
+            print("  ✗ No batch requests provided")
+            return []
+        
         results = []
         for i, req in enumerate(requests, 1):
-            print(f"\n[Batch {i}/{len(requests)}] {req.get('topic', '')[:60]}")
-            result = self.run(**req, auto_approve=True)
-            results.append(result)
-            if self.batch_delay_seconds > 0:
-                time.sleep(self.batch_delay_seconds)
+            try:
+                if not isinstance(req, dict):
+                    print(f"  ✗ [Batch {i}/{len(requests)}] Invalid request format (must be dict)")
+                    results.append({"error": "Invalid request format"})
+                    continue
+                
+                topic = req.get('topic', '').strip()
+                if not topic:
+                    print(f"  ✗ [Batch {i}/{len(requests)}] Missing topic")
+                    results.append({"error": "Missing topic"})
+                    continue
+                
+                print(f"\n[Batch {i}/{len(requests)}] {topic[:60]}")
+                result = self.run(**req, auto_approve=True)
+                
+                if result.get("error"):
+                    print(f"  ⚠ {result['error']}")
+                else:
+                    print(f"  ✓ Completed")
+                
+                results.append(result)
+                
+                if self.batch_delay_seconds > 0:
+                    time.sleep(self.batch_delay_seconds)
+                    
+            except Exception as e:
+                print(f"  ✗ [Batch {i}/{len(requests)}] {str(e)[:100]}")
+                results.append({"error": str(e)})
+        
         return results
 
     # ------------------------------------------------------------------ #

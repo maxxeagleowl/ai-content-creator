@@ -99,7 +99,13 @@ BATCH_REQUESTS = [
 
 
 def main():
-    args = parse_args()
+    try:
+        args = parse_args()
+    except SystemExit:
+        return
+    except Exception as e:
+        print(f"\n✗ Argument parsing error: {e}")
+        return
 
     print("\n  _____ _ _   ____        _       ")
     print(" |  ___(_) |_| __ ) _   _| |_ ___ ")
@@ -109,34 +115,73 @@ def main():
     print("                    |___/          ")
     print("  AI Content Creator\n")
 
-    pipeline = ContentPipeline(provider=args.provider, verbose=not args.quiet)
-
-    if args.batch:
-        print(f"Running batch: {len(BATCH_REQUESTS)} content pieces\n")
-        results = pipeline.run_batch(BATCH_REQUESTS)
-        print(f"\n✓ Batch complete. {len(results)} pieces generated in outputs/")
+    try:
+        pipeline = ContentPipeline(provider=args.provider, verbose=not args.quiet)
+    except ValueError as e:
+        print(f"✗ Configuration error: {e}")
+        return
+    except Exception as e:
+        print(f"✗ Failed to initialize pipeline: {str(e)[:150]}")
         return
 
-    if not args.topic:
-        print("Enter a content topic (or press Ctrl+C to quit):")
-        args.topic = input("> ").strip()
-        if not args.topic:
-            print("No topic provided. Exiting.")
+    try:
+        if args.batch:
+            if not BATCH_REQUESTS:
+                print("✗ No batch requests defined.")
+                return
+            print(f"Running batch: {len(BATCH_REQUESTS)} content pieces\n")
+            results = pipeline.run_batch(BATCH_REQUESTS)
+            completed = len([r for r in results if not r.get("error")])
+            failed = len(results) - completed
+            print(f"\n✓ Batch complete: {completed} succeeded", end="")
+            if failed > 0:
+                print(f", {failed} failed")
+            else:
+                print()
             return
 
-    if args.compare:
-        pipeline.compare_uniqueness(topic=args.topic, channel=args.channel)
-        return
+        if not args.topic:
+            print("Enter a content topic (or press Ctrl+C to quit):")
+            try:
+                args.topic = input("> ").strip()
+            except KeyboardInterrupt:
+                print("\nExiting.")
+                return
+            except EOFError:
+                print("\nNo input received. Exiting.")
+                return
+                
+            if not args.topic:
+                print("✗ No topic provided. Exiting.")
+                return
 
-    result = pipeline.run(
-        topic=args.topic,
-        channel=args.channel,
-        audience=args.audience,
-        auto_approve=args.auto,
-    )
+        if args.compare:
+            try:
+                pipeline.compare_uniqueness(topic=args.topic, channel=args.channel)
+            except Exception as e:
+                print(f"✗ Comparison failed: {str(e)[:150]}")
+            return
 
-    if result.get("content") and result["content"] not in ("", "__REGENERATE__"):
-        print(f"\n✓ Done. Content saved to outputs/")
+        result = pipeline.run(
+            topic=args.topic,
+            channel=args.channel,
+            audience=args.audience,
+            auto_approve=args.auto,
+        )
+
+        if result.get("error"):
+            print(f"\n✗ Generation failed: {result['error']}")
+            return
+
+        if result.get("content") and result["content"] not in ("", "__REGENERATE__"):
+            print(f"\n✓ Done. Content saved to outputs/")
+        else:
+            print(f"\n⚠ No content generated.")
+
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user.")
+    except Exception as e:
+        print(f"\n✗ Unexpected error: {str(e)[:150]}")
 
 
 if __name__ == "__main__":

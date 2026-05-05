@@ -40,14 +40,24 @@ class KnowledgeBase:
     def _load(self, path: Path) -> str:
         key = str(path)
         if key not in self._cache:
-            self._cache[key] = load_and_clean(path)
+            try:
+                self._cache[key] = load_and_clean(path)
+            except FileNotFoundError:
+                raise FileNotFoundError(f"Knowledge base file not found: {path}")
+            except Exception as e:
+                raise RuntimeError(f"Error loading knowledge base {path.name}: {e}")
         return self._cache[key]
 
     def _load_raw(self, path: Path) -> str:
         """Load raw markdown once and reuse it across section extractors."""
         key = str(path)
         if key not in self._raw_cache:
-            self._raw_cache[key] = load_file(path)
+            try:
+                self._raw_cache[key] = load_file(path)
+            except FileNotFoundError:
+                raise FileNotFoundError(f"Knowledge base file not found: {path}")
+            except Exception as e:
+                raise RuntimeError(f"Error loading knowledge base {path.name}: {e}")
         return self._raw_cache[key]
 
     @staticmethod
