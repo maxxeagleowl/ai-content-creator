@@ -13,8 +13,7 @@ Handles:
 
 import os
 import time
-import json
-from typing import Optional
+from typing import Callable, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
 from dotenv import load_dotenv
@@ -37,6 +36,40 @@ class LLMResponse:
 
     def __str__(self):
         return self.content
+
+
+def _is_rate_limit_error(error: Exception) -> bool:
+    """Return True for common provider rate limit errors."""
+    error_str = str(error).lower()
+    return "rate_limit" in error_str or "rate limit" in error_str or "too many requests" in error_str
+
+
+def _retry_with_backoff(provider_name: str, max_retries: int, call_fn: Callable[[], LLMResponse]) -> LLMResponse:
+    """Execute a provider call with exponential backoff on rate limits."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            return call_fn()
+        except Exception as e:
+            if _is_rate_limit_error(e) and attempt < max_retries:
+                wait = 2 ** attempt
+                print(f"  {provider_name} rate limit hit. Waiting {wait}s (attempt {attempt}/{max_retries})...")
+                time.sleep(wait)
+                continue
+            raise RuntimeError(f"{provider_name} API error after {attempt} attempt(s): {e}") from e
+
+    raise RuntimeError("Max retries exceeded.")
+
+
+def _usage_value(usage, field_name: str) -> int:
+    """Safely read a usage field returned by the API."""
+    if not usage:
+        return 0
+    return getattr(usage, field_name, 0) or 0
+
+
+def _trimmed_text(text: Optional[str]) -> str:
+    """Normalize returned LLM text to a clean string."""
+    return (text or "").strip()
 
 
 # ------------------------------------------------------------------ #
@@ -70,38 +103,28 @@ class OpenAIClient:
     ) -> LLMResponse:
         """Send a prompt and return an LLMResponse."""
 
-        for attempt in range(1, max_retries + 1):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    timeout=timeout,
-                )
+        def _call():
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+            )
 
-                usage = response.usage
-                return LLMResponse(
-                    content=response.choices[0].message.content.strip(),
-                    model=self.model,
-                    prompt_tokens=usage.prompt_tokens if usage else 0,
-                    completion_tokens=usage.completion_tokens if usage else 0,
-                    total_tokens=usage.total_tokens if usage else 0,
-                )
+            usage = response.usage
+            return LLMResponse(
+                content=_trimmed_text(response.choices[0].message.content),
+                model=self.model,
+                prompt_tokens=_usage_value(usage, "prompt_tokens"),
+                completion_tokens=_usage_value(usage, "completion_tokens"),
+                total_tokens=_usage_value(usage, "total_tokens"),
+            )
 
-            except Exception as e:
-                error_str = str(e)
-                if "rate_limit" in error_str.lower() and attempt < max_retries:
-                    wait = 2 ** attempt
-                    print(f"  Rate limit hit. Waiting {wait}s (attempt {attempt}/{max_retries})...")
-                    time.sleep(wait)
-                else:
-                    raise RuntimeError(f"OpenAI API error after {attempt} attempt(s): {e}") from e
-
-        raise RuntimeError("Max retries exceeded.")
+        return _retry_with_backoff("OpenAI", max_retries, _call)
 
     def generate_stream(
         self,
@@ -160,36 +183,30 @@ class AnthropicClient:
     ) -> LLMResponse:
         """Send a prompt and return an LLMResponse."""
 
-        for attempt in range(1, max_retries + 1):
-            try:
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=max_tokens,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": user_prompt}],
-                    temperature=temperature,
-                    timeout=timeout,
-                )
+        def _call():
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+                temperature=temperature,
+                timeout=timeout,
+            )
 
-                usage = response.usage
-                return LLMResponse(
-                    content=response.content[0].text.strip(),
-                    model=self.model,
-                    prompt_tokens=usage.input_tokens if usage else 0,
-                    completion_tokens=usage.output_tokens if usage else 0,
-                    total_tokens=(usage.input_tokens + usage.output_tokens) if usage else 0,
-                )
+            usage = response.usage
+            content_blocks = getattr(response, "content", [])
+            first_block = content_blocks[0] if content_blocks else None
+            text = getattr(first_block, "text", "") if first_block else ""
 
-            except Exception as e:
-                error_str = str(e)
-                if "rate_limit" in error_str.lower() and attempt < max_retries:
-                    wait = 2 ** attempt
-                    print(f"  Rate limit. Waiting {wait}s (attempt {attempt}/{max_retries})...")
-                    time.sleep(wait)
-                else:
-                    raise RuntimeError(f"Anthropic API error: {e}") from e
+            return LLMResponse(
+                content=_trimmed_text(text),
+                model=self.model,
+                prompt_tokens=_usage_value(usage, "input_tokens"),
+                completion_tokens=_usage_value(usage, "output_tokens"),
+                total_tokens=_usage_value(usage, "input_tokens") + _usage_value(usage, "output_tokens"),
+            )
 
-        raise RuntimeError("Max retries exceeded.")
+        return _retry_with_backoff("Anthropic", max_retries, _call)
 
     def generate_stream(
         self,
@@ -232,7 +249,7 @@ def get_llm_client(provider: str = "openai") -> OpenAIClient | AnthropicClient:
 
     if provider == "openai":
         return OpenAIClient()
-    elif provider == "anthropic":
+    if provider == "anthropic":
         return AnthropicClient()
     else:
         raise ValueError(f"Unknown provider: {provider}. Use 'openai' or 'anthropic'.")
@@ -291,7 +308,7 @@ In 3-4 sentences, explain specifically how Post A differs from Post B in terms o
 2. Specificity of data and product references
 3. Audience relevance and contextual framing
 
-Be concrete — quote specific phrases where relevant."""
+Be concrete - quote specific phrases where relevant."""
 
     analysis = llm.generate(
         user_prompt=analysis_prompt,
