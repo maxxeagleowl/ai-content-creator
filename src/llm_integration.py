@@ -16,9 +16,10 @@ import time
 import json
 from typing import Optional
 from dataclasses import dataclass, field
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
 # ------------------------------------------------------------------ #
@@ -102,6 +103,31 @@ class OpenAIClient:
 
         raise RuntimeError("Max retries exceeded.")
 
+    def generate_stream(
+        self,
+        user_prompt: str,
+        system_prompt: str = "You are a helpful assistant.",
+        temperature: float = 0.7,
+        max_tokens: int = 800,
+        timeout: int = 60,
+    ):
+        """Yield text chunks as they arrive (streaming)."""
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            stream=True,
+        )
+        for chunk in response:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
 
 # ------------------------------------------------------------------ #
 # ANTHROPIC CLIENT
@@ -164,6 +190,25 @@ class AnthropicClient:
                     raise RuntimeError(f"Anthropic API error: {e}") from e
 
         raise RuntimeError("Max retries exceeded.")
+
+    def generate_stream(
+        self,
+        user_prompt: str,
+        system_prompt: str = "You are a helpful assistant.",
+        temperature: float = 0.7,
+        max_tokens: int = 800,
+        timeout: int = 60,
+    ):
+        """Yield text chunks as they arrive (streaming)."""
+        with self.client.messages.stream(
+            model=self.model,
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+            temperature=temperature,
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
 
 
 # ------------------------------------------------------------------ #
