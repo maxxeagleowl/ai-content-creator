@@ -8,3 +8,7 @@ __pycache__/
 .pytest_cache/
 .vscode/settings.json
 src/__pycache__/
+.claude/settings.local.json
+generate_presentation.py
+~$FitByte_AI_Content_Creator_Presentation.pptx
+

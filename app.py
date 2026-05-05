@@ -16,8 +16,10 @@ Run with:
 
 import sys
 import os
+import json
 import tempfile
 import socket
+from threading import Lock
 from pathlib import Path
 from datetime import datetime
 
@@ -40,6 +42,8 @@ kb  = KnowledgeBase()
 llm = get_llm_client(provider="auto")
 
 _kb_cache: dict = {}
+_feedback_lock = Lock()
+FEEDBACK_FILE = Path(__file__).parent / "outputs" / "user_feedback.json"
 
 def get_cached_context(topic: str, audience: str) -> dict:
     key = f"{topic}:{audience}"
@@ -123,6 +127,70 @@ AUDIENCE INSIGHTS:
 {audience_insights}
 
 Return ONLY the revised content. Do not add a preamble, notes, or explanation."""
+
+
+def save_user_feedback(
+    current_content: str,
+    state: dict,
+    rating: int,
+    comment: str = "",
+    user_name: str = "",
+) -> tuple[str, str, str]:
+    """
+    Save one feedback entry as an appended JSON record.
+
+    Returns a status message plus cleared optional fields.
+    """
+    if not current_content or not current_content.strip():
+        gr.Warning("Generate a post first before submitting feedback.")
+        return "", comment, user_name
+
+    try:
+        rating_value = int(rating)
+    except (TypeError, ValueError):
+        gr.Warning("Rating must be between 1 and 5.")
+        return "", comment, user_name
+
+    if rating_value < 1 or rating_value > 5:
+        gr.Warning("Rating must be between 1 and 5.")
+        return "", comment, user_name
+
+    entry = {
+        "feedback_id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
+        "submitted_at": datetime.now().isoformat(timespec="seconds"),
+        "rating": rating_value,
+        "comment": comment.strip() or None,
+        "user_name": user_name.strip() or None,
+        "output_text": current_content.strip(),
+        "output_excerpt": current_content.strip()[:500],
+        "output_word_count": len(current_content.split()),
+        "topic": (state or {}).get("topic"),
+        "channel": (state or {}).get("channel"),
+        "channel_label": (state or {}).get("channel_label"),
+        "audience": (state or {}).get("audience"),
+        "output_label": (state or {}).get("output_label"),
+    }
+
+    FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with _feedback_lock:
+        existing = []
+        if FEEDBACK_FILE.exists():
+            try:
+                with FEEDBACK_FILE.open("r", encoding="utf-8") as handle:
+                    loaded = json.load(handle)
+                if isinstance(loaded, list):
+                    existing = loaded
+                elif isinstance(loaded, dict):
+                    existing = [loaded]
+            except json.JSONDecodeError:
+                existing = []
+
+        existing.append(entry)
+        with FEEDBACK_FILE.open("w", encoding="utf-8") as handle:
+            json.dump(existing, handle, ensure_ascii=False, indent=2)
+
+    return "Feedback saved to `outputs/user_feedback.json`.", "", ""
 
 
 # ── BUSINESS LOGIC ────────────────────────────────────────────────────
@@ -346,6 +414,32 @@ FITBYTE_CSS = """
 
 .refine-box  { background: #FFFBEB; border: 1.5px solid #FDE68A; border-radius: 10px; padding: 16px; }
 .approve-box { background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 10px; padding: 16px; }
+.feedback-box {
+    background: #FFF7ED;
+    border: 1.5px solid #FDBA74;
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 12px;
+    max-width: 420px;
+    margin-left: auto;
+}
+#feedback-panel {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    width: 320px;
+    z-index: 50;
+}
+@media (max-width: 900px) {
+    #feedback-panel {
+        position: static;
+        width: 100%;
+        right: auto;
+        bottom: auto;
+        z-index: auto;
+        margin-top: 16px;
+    }
+}
 .tip-box {
     background: #EFF6FF; border-left: 4px solid #1A56DB;
     border-radius: 0 8px 8px 0; padding: 12px 16px;
@@ -464,6 +558,32 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
     # ── EVENT WIRING ─────────────────────────────────────────────────
 
+    with gr.Group(elem_id="feedback-panel", elem_classes=["feedback-box"]):
+        gr.HTML('<div class="fb-section-label" style="color:#9A3412">User Feedback</div>')
+        feedback_status = gr.Markdown("")
+        feedback_rating = gr.Slider(
+            minimum=1,
+            maximum=5,
+            value=3,
+            step=1,
+            label="Rating",
+        )
+        feedback_comment = gr.Textbox(
+            label="Comment (optional)",
+            placeholder="What should be improved?",
+            lines=2,
+        )
+        feedback_name = gr.Textbox(
+            label="User Name (optional)",
+            placeholder="Your name",
+            lines=1,
+        )
+        feedback_submit_btn = gr.Button(
+            "Submit Feedback",
+            elem_classes=["btn-generate"],
+            size="sm",
+        )
+
     generate_btn.click(
         fn=generate_post,
         inputs=[topic_input, audience_input, channel_input, custom_input],
@@ -482,6 +602,13 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
         fn=approve_and_download,
         inputs=[output_box, content_state],
         outputs=[download_file],
+        queue=False,
+    )
+
+    feedback_submit_btn.click(
+        fn=save_user_feedback,
+        inputs=[output_box, content_state, feedback_rating, feedback_comment, feedback_name],
+        outputs=[feedback_status, feedback_comment, feedback_name],
         queue=False,
     )
 
