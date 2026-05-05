@@ -71,7 +71,10 @@ def _usage_value(usage, field_name: str) -> int:
 def _trimmed_text(text: Optional[str]) -> str:
     """Normalize returned LLM text to a clean string."""
     normalized = re.sub(r"[\u2014-]+", " ", text or "")
-    return re.sub(r"\s+", " ", normalized).strip()
+    normalized = re.sub(r"[ \t\r\f\v]+", " ", normalized)
+    normalized = re.sub(r" *\n *", "\n", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
 
 
 def _stream_text(text: Optional[str]):
@@ -79,7 +82,10 @@ def _stream_text(text: Optional[str]):
     chunk = text or ""
     if chunk:
         normalized = re.sub(r"[\u2014-]+", " ", chunk)
-        yield re.sub(r"\s+", " ", normalized).strip()
+        normalized = re.sub(r"[ \t\r\f\v]+", " ", normalized)
+        normalized = re.sub(r" *\n *", "\n", normalized)
+        normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+        yield normalized.strip()
 
 
 # ------------------------------------------------------------------ #
