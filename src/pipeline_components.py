@@ -62,12 +62,14 @@ def build_prompt_context(
         topic=topic,
         channel=channel,
         audience=audience,
+        brand_identity=context.get("brand_identity", ""),
         brand_voice=context.get("brand_voice", ""),
         writing_rules=context.get("writing_rules", ""),
         content_examples=context.get("content_examples", ""),
         product_specs=context.get("product_specs", ""),
         market_context=context.get("market_context", ""),
         differentiators=context.get("differentiators", ""),
+        audience_insights=context.get("audience_insights", ""),
         extra_instructions=extra_instructions or "",
     )
 

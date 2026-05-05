@@ -102,6 +102,8 @@ def build_refine_prompt(current_content: str, refinement_instruction: str, state
     channel = state.get("channel", "blog") if state else "blog"
     channel_config = get_channel_config(channel)
     brand_rules = state.get("writing_rules", "")[:400] if state else ""
+    brand_identity = state.get("brand_identity", "")[:400] if state else ""
+    audience_insights = state.get("audience_insights", "")[:400] if state else ""
 
     return f"""You are editing an existing FitByte {channel_config['label']}. Apply ONLY the instruction below — keep everything else the same.
 
@@ -114,7 +116,13 @@ INSTRUCTION TO APPLY:
 BRAND RULES (do not break these):
 {brand_rules}
 
-Return ONLY the revised content — no preamble, no notes, no explanation."""
+BRAND IDENTITY:
+{brand_identity}
+
+AUDIENCE INSIGHTS:
+{audience_insights}
+
+Return ONLY the revised content. Do not add a preamble, notes, or explanation."""
 
 
 # ── BUSINESS LOGIC ────────────────────────────────────────────────────
@@ -143,12 +151,14 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             topic=topic,
             channel=channel,
             audience=audience,
+            brand_identity=context["brand_identity"],
             brand_voice=context["brand_voice"],
             writing_rules=context["writing_rules"],
             content_examples=context["content_examples"],
             product_specs=context["product_specs"],
             market_context=context["market_context"],
             differentiators=context["differentiators"],
+            audience_insights=context["audience_insights"],
             extra_instructions=custom_instructions or "",
         )
 
@@ -176,7 +186,9 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             "channel_label": channel_label,
             "audience":      audience,
             "output_label":  channel_config["label"],
+            "brand_identity": context["brand_identity"][:600],
             "writing_rules": context["writing_rules"][:600],
+            "audience_insights": context["audience_insights"][:600],
         }
 
         return content, state, word_count(content)
@@ -216,6 +228,8 @@ def refine_post(current_content, refinement_instruction, state):
                     topic=state.get("topic", ""),
                     channel=state.get("channel", "blog"),
                     audience=state.get("audience", "fitness_enthusiast"),
+                    brand_identity=state.get("brand_identity", ""),
+                    audience_insights=state.get("audience_insights", ""),
                 )
             ),
             temperature=0.65,
@@ -487,3 +501,8 @@ if __name__ == "__main__":
         inbrowser=True,
         show_error=True,
     )
+
+
+
+
+

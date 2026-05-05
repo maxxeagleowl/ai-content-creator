@@ -77,12 +77,14 @@ class PromptContext:
     audience: Audience = "general"
 
     # knowledge base inputs
+    brand_identity: str = ""
     brand_voice: str = ""
     writing_rules: str = ""
     content_examples: str = ""
     product_specs: str = ""
     market_context: str = ""
     differentiators: str = ""
+    audience_insights: str = ""
 
     # optional additional control
     extra_instructions: str = ""
@@ -107,6 +109,12 @@ They produce content that is:
 - precise
 - grounded in real context
 - non-generic
+
+Brand identity:
+{ctx.brand_identity[:800]}
+
+Audience insights:
+{ctx.audience_insights[:800]}
 
 They strictly follow the provided knowledge base context.
 They never invent facts.
@@ -166,6 +174,11 @@ CHANNEL:
 {ctx.channel}
 
 BRAND CONTEXT:
+{ctx.brand_identity[:1200]}
+
+AUDIENCE INSIGHTS:
+{ctx.audience_insights[:1000]}
+
 {ctx.brand_voice[:1500]}
 
 MARKET CONTEXT:
@@ -221,6 +234,11 @@ Write a blog post for {ctx.brand_name} about:
 {brief_section}
 
 BRAND VOICE:
+{ctx.brand_identity[:1200]}
+
+AUDIENCE INSIGHTS:
+{ctx.audience_insights[:1000]}
+
 {ctx.brand_voice[:1500]}
 
 WRITING RULES:
@@ -259,8 +277,9 @@ Write an Instagram caption for {ctx.brand_name} about:
 {ctx.topic}
 
 RULES:
-- 1 to 2 lines
-- strong hook
+- start with one strong hookline
+- after the hookline, write 2 short sentences about the user topic
+- finish with 1 closing sentence that wraps the idea up
 - no generic phrases
 - minimal explanation
 - use emojis 
@@ -284,6 +303,12 @@ def build_linkedin_prompt(ctx: PromptContext) -> str:
 Write a LinkedIn post for {ctx.brand_name} about:
 
 {ctx.topic}
+
+BRAND IDENTITY:
+{ctx.brand_identity[:900]}
+
+AUDIENCE INSIGHTS:
+{ctx.audience_insights[:800]}
 
 RULES:
 - 100 to 150 words
