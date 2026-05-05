@@ -79,7 +79,26 @@ class ContentDocumenter:
     kb: KnowledgeBase
 
     def document(self, topic: str, audience: str) -> dict:
-        return self.kb.full_context_for_generation(topic=topic, audience=audience)
+        """Load knowledge base context with error handling."""
+        try:
+            if not topic or not topic.strip():
+                raise ValueError("Topic cannot be empty")
+            
+            context = self.kb.full_context_for_generation(topic=topic, audience=audience)
+            
+            # Validate that we got meaningful context
+            if not context:
+                raise RuntimeError("Knowledge base returned empty context")
+            
+            for key, value in context.items():
+                if not isinstance(value, str):
+                    raise TypeError(f"Expected string for {key}, got {type(value).__name__}")
+            
+            return context
+        except FileNotFoundError as e:
+            raise RuntimeError(f"Knowledge base file missing: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to load knowledge base: {e}")
 
 
 @dataclass
@@ -88,7 +107,15 @@ class ContentMonitor:
     logger: Callable[[str], None]
 
     def analyze(self, topic: str, context: dict) -> dict:
-        analysis_prompt = f"""You are a content strategist for FitByte, a precision fitness watch brand.
+        """Analyze topic for brand fit with error handling."""
+        try:
+            if not topic or not topic.strip():
+                raise ValueError("Topic cannot be empty")
+            
+            if not context or not isinstance(context, dict):
+                raise ValueError("Invalid context provided")
+            
+            analysis_prompt = f"""You are a content strategist for FitByte, a precision fitness watch brand.
 
 Analyze this content topic: "{topic}"
 
@@ -106,20 +133,26 @@ Answer briefly:
 
 Return as JSON with keys: brand_fit_score, market_relevance, best_angle, risk"""
 
-        response = self.llm.generate(
-            user_prompt=analysis_prompt,
-            system_prompt=build_analyst_system_prompt(
-                PromptContext(topic=topic, audience="general")
-            ),
-            temperature=0,
-            max_tokens=400,
-        )
+            response = self.llm.generate(
+                user_prompt=analysis_prompt,
+                system_prompt=build_analyst_system_prompt(
+                    PromptContext(topic=topic, audience="general")
+                ),
+                temperature=0,
+                max_tokens=400,
+            )
+            
+            if not response or not response.content.strip():
+                raise RuntimeError("LLM returned empty analysis")
 
-        report = _parse_json_response(response.content)
-        self.logger(f"  OK Brand fit score: {report.get('brand_fit_score', 'N/A')}/10")
-        best_angle = str(report.get("best_angle", "N/A"))
-        self.logger(f"  OK Best angle: {best_angle[:80]}")
-        return report
+            report = _parse_json_response(response.content)
+            self.logger(f"  OK Brand fit score: {report.get('brand_fit_score', 'N/A')}/10")
+            best_angle = str(report.get("best_angle", "N/A"))
+            self.logger(f"  OK Best angle: {best_angle[:80]}")
+            return report
+        except Exception as e:
+            self.logger(f"  ⚠ Analysis failed: {str(e)[:80]}")
+            return {"brand_fit_score": 0, "error": str(e)}
 
 
 @dataclass
@@ -128,16 +161,29 @@ class ContentBriefGenerator:
     logger: Callable[[str], None]
 
     def generate(self, topic: str, channel: str, audience: str, context: dict) -> str:
-        ctx = build_prompt_context(topic, channel, audience, context)
-        brief_response = self.llm.generate(
-            user_prompt=build_brief_prompt(ctx),
-            system_prompt=build_analyst_system_prompt(ctx),
-            temperature=0.5,
-            max_tokens=600,
-        )
+        """Generate content brief with error handling."""
+        try:
+            if not topic or not topic.strip():
+                raise ValueError("Topic cannot be empty")
+            if not context:
+                raise ValueError("Context cannot be empty")
+            
+            ctx = build_prompt_context(topic, channel, audience, context)
+            brief_response = self.llm.generate(
+                user_prompt=build_brief_prompt(ctx),
+                system_prompt=build_analyst_system_prompt(ctx),
+                temperature=0.5,
+                max_tokens=600,
+            )
+            
+            if not brief_response or not brief_response.content.strip():
+                raise RuntimeError("LLM failed to generate brief")
 
-        self.logger(f"  OK Brief generated ({brief_response.total_tokens} tokens used)")
-        return brief_response.content
+            self.logger(f"  OK Brief generated ({brief_response.total_tokens} tokens used)")
+            return brief_response.content
+        except Exception as e:
+            self.logger(f"  ✗ Brief generation failed: {str(e)[:80]}")
+            raise RuntimeError(f"Failed to generate content brief: {e}")
 
 
 @dataclass
@@ -146,18 +192,36 @@ class ContentPublisher:
     logger: Callable[[str], None]
 
     def publish(self, topic: str, channel: str, audience: str, context: dict, brief: str) -> str:
-        ctx = build_prompt_context(topic, channel, audience, context)
-        system_prompt, user_prompt = get_prompt_for_channel(ctx, brief=brief)
+        """Generate final content with error handling."""
+        try:
+            if not topic or not topic.strip():
+                raise ValueError("Topic cannot be empty")
+            if not channel:
+                raise ValueError("Channel cannot be empty")
+            if not context:
+                raise ValueError("Context cannot be empty")
+            
+            ctx = build_prompt_context(topic, channel, audience, context)
+            system_prompt, user_prompt = get_prompt_for_channel(ctx, brief=brief)
+            
+            if not user_prompt or not system_prompt:
+                raise RuntimeError(f"Failed to build prompts for channel: {channel}")
 
-        content_response = self.llm.generate(
-            user_prompt=user_prompt,
-            system_prompt=system_prompt,
-            temperature=0.75,
-            max_tokens=800,
-        )
+            content_response = self.llm.generate(
+                user_prompt=user_prompt,
+                system_prompt=system_prompt,
+                temperature=0.75,
+                max_tokens=800,
+            )
+            
+            if not content_response or not content_response.content.strip():
+                raise RuntimeError(f"LLM failed to generate {channel} content")
 
-        self.logger(f"  OK Content generated ({content_response.total_tokens} tokens used)")
-        return content_response.content
+            self.logger(f"  OK Content generated ({content_response.total_tokens} tokens used)")
+            return content_response.content
+        except Exception as e:
+            self.logger(f"  ✗ Content generation failed: {str(e)[:80]}")
+            raise RuntimeError(f"Failed to generate content: {e}")
 
 
 @dataclass
@@ -165,28 +229,53 @@ class OutputManager:
     output_dir: Path = OUTPUT_DIR
 
     def save_content(self, content: str, topic: str, channel: str, edited: bool = False) -> Path:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        suffix = "_edited" if edited else ""
-        filename = self.output_dir / f"{timestamp}_{channel}_{_slugify(topic)}{suffix}.txt"
+        """Save content with error handling."""
+        try:
+            if not content or not content.strip():
+                raise ValueError("Content cannot be empty")
+            if not topic or not topic.strip():
+                raise ValueError("Topic cannot be empty")
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            suffix = "_edited" if edited else ""
+            filename = self.output_dir / f"{timestamp}_{channel}_{_slugify(topic)}{suffix}.txt"
 
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        with open(filename, "w", encoding="utf-8") as handle:
-            handle.write(f"Topic: {topic}\n")
-            handle.write(f"Channel: {channel}\n")
-            handle.write(f"Generated: {datetime.now().isoformat()}\n")
-            handle.write(f"Edited: {edited}\n")
-            handle.write("\n" + "=" * 60 + "\n\n")
-            handle.write(content)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            
+            with open(filename, "w", encoding="utf-8") as handle:
+                handle.write(f"Topic: {topic}\n")
+                handle.write(f"Channel: {channel}\n")
+                handle.write(f"Generated: {datetime.now().isoformat()}\n")
+                handle.write(f"Edited: {edited}\n")
+                handle.write("\n" + "=" * 60 + "\n\n")
+                handle.write(content)
 
-        return filename
+            return filename
+        except IOError as e:
+            raise RuntimeError(f"Failed to save content to file: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error while saving: {e}")
 
     def save_comparison(self, comparison: dict, topic: str) -> Path:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = self.output_dir / f"{timestamp}_uniqueness_comparison_{_slugify(topic, 30)}.json"
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as handle:
-            json.dump(comparison, handle, indent=2)
-        return filepath
+        """Save comparison result with error handling."""
+        try:
+            if not comparison or not isinstance(comparison, dict):
+                raise ValueError("Invalid comparison data")
+            if not topic or not topic.strip():
+                raise ValueError("Topic cannot be empty")
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = self.output_dir / f"{timestamp}_uniqueness_comparison_{_slugify(topic, 30)}.json"
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            
+            with open(filepath, "w", encoding="utf-8") as handle:
+                json.dump(comparison, handle, indent=2)
+            
+            return filepath
+        except IOError as e:
+            raise RuntimeError(f"Failed to save comparison file: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Error saving comparison: {e}")
 
 
 @dataclass

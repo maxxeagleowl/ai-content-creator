@@ -197,7 +197,7 @@ def save_user_feedback(
 
 def generate_post(topic, audience_label, channel_label, custom_instructions):
     """
-    Runs the LLM pipeline.
+    Runs the LLM pipeline with comprehensive error handling.
 
     Returns
     -------
@@ -206,15 +206,33 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
     wc      : str          → word_count_display
     """
     if not topic.strip():
-        gr.Warning("Please enter a topic before generating.")
+        gr.Warning("⚠️  Please enter a topic before generating.")
         return "", {}, "0 words"
 
     try:
+        # Validate inputs
+        topic = topic.strip()
+        if len(topic) < 3:
+            gr.Warning("⚠️  Topic must be at least 3 characters.")
+            return "", {}, "0 words"
+        
+        if len(topic) > 200:
+            gr.Warning("⚠️  Topic must be under 200 characters.")
+            return "", {}, "0 words"
+
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
         channel = CHANNELS.get(channel_label, "blog")
         channel_config = get_channel_config(channel)
+        
+        gr.Info("🔄 Loading knowledge base...")
         context  = get_cached_context(topic, audience)
+        
+        # Validate context loaded properly
+        if not context or not any(context.values()):
+            gr.Error("❌ Failed to load knowledge base. Please check the knowledge_base/ folder.")
+            return "", {}, "0 words"
 
+        gr.Info("💭 Building prompt context...")
         ctx = PromptContext(
             topic=topic,
             channel=channel,
@@ -235,6 +253,7 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
         if custom_instructions.strip():
             user_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_instructions.strip()}"
 
+        gr.Info(f"⏳ Generating {channel_config['label']}... (this may take 10-20 seconds)")
         response = llm.generate(
             user_prompt=user_prompt,
             system_prompt=system_prompt,
@@ -243,9 +262,13 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             timeout=45,
         )
 
+        if not response or not response.content:
+            gr.Error("❌ LLM returned empty response. Please try again.")
+            return "", {}, "0 words"
+
         content = response.content.strip()
         if not content:
-            gr.Error("Failed to generate content. Please try again.")
+            gr.Error("❌ Generated content is empty. Please try again.")
             return "", {}, "0 words"
 
         state = {
@@ -259,36 +282,54 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             "audience_insights": context["audience_insights"][:600],
         }
 
+        gr.Info(f"✅ Content generated! ({len(content.split())} words)")
         return content, state, word_count(content)
 
-    except Exception as e:
+    except ValueError as e:
+        error_msg = f"❌ Validation error: {str(e)}"
+        gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
-        gr.Error(f"Error: {str(e)[:120]}")
+        return "", {}, "0 words"
+    except RuntimeError as e:
+        error_msg = f"❌ {str(e)[:100]}"
+        gr.Error(error_msg)
+        print(f"ERROR in generate_post: {e}")
+        return "", {}, "0 words"
+    except Exception as e:
+        error_msg = f"❌ Unexpected error: {str(e)[:100]}"
+        gr.Error(error_msg)
+        print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
 
 
 def refine_post(current_content, refinement_instruction, state):
     """
-    Refines the current post.
+    Refines the current post with error handling and user feedback.
 
     Inputs  : current_content (output_box), refinement_instruction, state (content_state)
     Returns : new_content → output_box  |  updated_state → content_state
     """
     if not current_content.strip():
-        gr.Warning("Generate a post first before refining.")
+        gr.Warning("⚠️  Generate a post first before refining.")
         return current_content, state
 
     if not refinement_instruction.strip():
-        gr.Warning("Enter a refinement instruction.")
+        gr.Warning("⚠️  Enter a refinement instruction (e.g., 'make it shorter' or 'add more emojis').")
         return current_content, state
 
-    if not state:
-        gr.Warning("No generation context found — please generate a post first.")
+    if not state or not isinstance(state, dict):
+        gr.Warning("⚠️  No generation context found — please generate a post first.")
         return current_content, state
 
     try:
-        refine_prompt = build_refine_prompt(current_content, refinement_instruction, state)
+        # Validate instruction length
+        if len(refinement_instruction) > 300:
+            gr.Warning("⚠️  Refinement instruction is too long (max 300 characters).")
+            return current_content, state
 
+        refine_prompt = build_refine_prompt(current_content, refinement_instruction, state)
+        
+        gr.Info("🔄 Applying refinement...")
         response = llm.generate(
             user_prompt=refine_prompt,
             system_prompt=build_writer_system_prompt(
@@ -306,75 +347,120 @@ def refine_post(current_content, refinement_instruction, state):
         )
 
         if not response or not response.content.strip():
-            gr.Error("Failed to refine post. Please try again.")
+            gr.Error("❌ Failed to refine post. Please try again or regenerate from scratch.")
             return current_content, state
 
         new_content   = response.content.strip()
         updated_state = {**state, "content": new_content}
+        
+        old_wc = len(current_content.split())
+        new_wc = len(new_content.split())
+        gr.Info(f"✅ Refinement applied ({old_wc} → {new_wc} words)")
+        
         return new_content, updated_state
 
-    except Exception as e:
+    except ValueError as e:
+        error_msg = f"❌ Validation error: {str(e)}"
+        gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
-        gr.Error(f"Error refining post: {str(e)[:120]}")
+        return current_content, state
+    except RuntimeError as e:
+        error_msg = f"❌ Refinement failed: {str(e)[:100]}"
+        gr.Error(error_msg)
+        print(f"ERROR in refine_post: {e}")
+        return current_content, state
+    except Exception as e:
+        error_msg = f"❌ Unexpected error: {str(e)[:100]}"
+        gr.Error(error_msg)
+        print(f"ERROR in refine_post: {e}")
         return current_content, state
 
 
 def approve_and_download(current_content, state):
     """
-    Saves the approved post as a .txt file.
+    Saves the approved post as a .txt file with error handling and user feedback.
 
     Inputs  : current_content (output_box), state (content_state)
     Returns : file path → download_file
     """
     content = current_content.strip()
     if not content:
-        gr.Warning("Nothing to download — generate a post first.")
+        gr.Warning("⚠️  Nothing to download — generate a post first.")
         return None
 
     try:
+        # Validate content
+        if len(content) < 5:
+            gr.Warning("⚠️  Content is too short to save.")
+            return None
+
         topic         = state.get("topic", "post") if state else "post"
         channel_label = state.get("channel_label", "Blog Post") if state else "Blog Post"
         channel       = state.get("channel", "blog") if state else "blog"
 
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False,
-            prefix=f"fitbyte_{channel}_"
-        )
-        tmp.write("FitByte Content — Approved\n")
-        tmp.write(f"Topic:   {topic}\n")
-        tmp.write(f"Channel: {channel_label}\n")
-        tmp.write(f"Date:    {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-        tmp.write("\n" + "=" * 60 + "\n\n")
-        tmp.write(content)
-        tmp.close()
+        # Validate state
+        if not state or not isinstance(state, dict):
+            gr.Warning("⚠️  No state information available.")
+            return None
 
-        gr.Info("File saved successfully!")
-        return tmp.name
+        try:
+            tmp = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False,
+                prefix=f"fitbyte_{channel}_"
+            )
+            tmp.write("FitByte Content — Approved\n")
+            tmp.write(f"Topic:   {topic}\n")
+            tmp.write(f"Channel: {channel_label}\n")
+            tmp.write(f"Date:    {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+            tmp.write("\n" + "=" * 60 + "\n\n")
+            tmp.write(content)
+            tmp.close()
 
-    except Exception as e:
+            gr.Info(f"✅ File saved successfully! ({len(content.split())} words)")
+            print(f"  Saved to: {tmp.name}")
+            return tmp.name
+
+        except IOError as e:
+            raise RuntimeError(f"Failed to write file: {e}")
+            
+    except IOError as e:
+        error_msg = f"❌ File I/O error: {str(e)[:100]}"
+        gr.Error(error_msg)
         print(f"ERROR in approve_and_download: {e}")
-        gr.Error(f"Error saving file: {str(e)[:120]}")
+        return None
+    except ValueError as e:
+        error_msg = f"❌ Invalid data: {str(e)[:100]}"
+        gr.Error(error_msg)
+        print(f"ERROR in approve_and_download: {e}")
+        return None
+    except Exception as e:
+        error_msg = f"❌ Failed to save file: {str(e)[:100]}"
+        gr.Error(error_msg)
+        print(f"ERROR in approve_and_download: {e}")
         return None
 
 
 # ── PORT HELPER ───────────────────────────────────────────────────────
 
 def find_free_port(start_port=7860, max_attempts=25):
+    """Find a free port with error handling."""
     env_port = os.getenv("GRADIO_SERVER_PORT")
     if env_port:
         try:
             start_port = int(env_port)
         except ValueError:
-            pass
+            print(f"  ⚠ Invalid GRADIO_SERVER_PORT: {env_port}, using default {start_port}")
+    
     for port in range(start_port, start_port + max_attempts):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind(("0.0.0.0", port))
-            except OSError:
-                continue
-            return port
-    raise OSError(f"No open port found in {start_port}–{start_port + max_attempts - 1}.")
+                return port
+        except OSError:
+            continue
+    
+    raise OSError(f"✗ No open port found in {start_port}–{start_port + max_attempts - 1}.")
 
 
 # ── CSS ───────────────────────────────────────────────────────────────
@@ -616,18 +702,26 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 demo.queue()
 
 if __name__ == "__main__":
-    server_port = find_free_port()
-    print("\n  FitByte AI Content Creator")
-    print("  ──────────────────────────")
-    print(f"  LLM: {llm.__class__.__name__} / {llm.model}")
-    print(f"  Open: http://localhost:{server_port}\n")
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=server_port,
-        share=False,
-        inbrowser=True,
-        show_error=True,
-    )
+    try:
+        server_port = find_free_port()
+        print("\n  ✅ FitByte AI Content Creator")
+        print("  ──────────────────────────")
+        print(f"  LLM: {llm.__class__.__name__} / {llm.model}")
+        print(f"  Open: http://localhost:{server_port}\n")
+        demo.launch(
+            server_name="0.0.0.0",
+            server_port=server_port,
+            share=False,
+            inbrowser=True,
+            show_error=True,
+        )
+    except OSError as e:
+        print(f"\n✗ Failed to start server: {e}")
+        print("  Try: export GRADIO_SERVER_PORT=7861 (or another free port)")
+    except KeyboardInterrupt:
+        print("\n\nServer stopped by user.")
+    except Exception as e:
+        print(f"\n✗ Unexpected error: {e}")
 
 
 
