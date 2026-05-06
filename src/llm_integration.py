@@ -277,10 +277,10 @@ def get_llm_client(provider: str = "openai") -> OpenAIClient | AnthropicClient:
 
 def run_uniqueness_comparison(
     topic: str,
-    channel: str,
     fitbyte_prompt: str,
     fitbyte_system: str,
     llm: OpenAIClient | AnthropicClient,
+    channel: str = "blog",
 ) -> dict:
     """
     Generates content from both FitByte's branded prompt and a generic prompt,

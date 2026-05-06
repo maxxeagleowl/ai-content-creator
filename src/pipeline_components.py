@@ -264,12 +264,39 @@ class OutputManager:
             if not topic or not topic.strip():
                 raise ValueError("Topic cannot be empty")
             
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filepath = self.output_dir / f"{timestamp}_uniqueness_comparison_{_slugify(topic, 30)}.json"
+            filepath = self.output_dir / "uniqueness_comparison.md"
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            
+
+            fitbyte_output = comparison.get("fitbyte_output", "").strip()
+            generic_output = comparison.get("generic_output", "").strip()
+            analysis = comparison.get("analysis", "").strip()
+            model = comparison.get("model", "")
+            source_topic = comparison.get("topic", topic)
+
+            md = [
+                "# FitByte Uniqueness Evidence",
+                "",
+                f"- Topic: {source_topic}",
+                f"- Generated: {datetime.now().isoformat(timespec='seconds')}",
+            ]
+            if model:
+                md.append(f"- Model: {model}")
+            md.extend([
+                "",
+                "## Side-by-Side Comparison",
+                "",
+                "| Generic ChatGPT Output | FitByte System Output |",
+                "|---|---|",
+                f"| {generic_output.replace('|', '\\|').replace(chr(10), '<br>')} | {fitbyte_output.replace('|', '\\|').replace(chr(10), '<br>')} |",
+                "",
+                "## Key Differences",
+                "",
+                analysis.replace("\n", "<br>"),
+                "",
+            ])
+
             with open(filepath, "w", encoding="utf-8") as handle:
-                json.dump(comparison, handle, indent=2)
+                handle.write("\n".join(md).strip() + "\n")
             
             return filepath
         except IOError as e:

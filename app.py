@@ -136,9 +136,10 @@ def render_star_rating_html(rating: int) -> str:
     return f'<div class="feedback-rating-visual" aria-label="Rating {rating_value} of 5">{filled}{empty}</div>'
 
 
-def set_feedback_rating(rating: int) -> tuple[int, str]:
-    rating_value = max(1, min(5, int(rating)))
-    return rating_value, render_star_rating_html(rating_value)
+def set_feedback_rating(rating: int) -> tuple:
+    v = max(1, min(5, int(rating)))
+    labels = ["★" if i <= v else "☆" for i in range(1, 6)]
+    return (v, *labels)
 
 
 def save_user_feedback(
@@ -147,25 +148,27 @@ def save_user_feedback(
     rating: int,
     comment: str = "",
     user_name: str = "",
-) -> tuple[str, int, str, str, str]:
+) -> tuple:
     """
     Save one feedback entry as an appended JSON record.
 
     Returns a status message plus cleared optional fields.
     """
+    _reset = (3, "★", "★", "★", "☆", "☆")
+
     if not current_content or not current_content.strip():
         gr.Warning("Generate a post first before submitting feedback.")
-        return "", 3, render_star_rating_html(3), comment, user_name
+        return ("", *_reset, comment, user_name)
 
     try:
         rating_value = int(rating)
     except (TypeError, ValueError):
         gr.Warning("Rating must be between 1 and 5.")
-        return "", 3, render_star_rating_html(3), comment, user_name
+        return ("", *_reset, comment, user_name)
 
     if rating_value < 1 or rating_value > 5:
         gr.Warning("Rating must be between 1 and 5.")
-        return "", 3, render_star_rating_html(3), comment, user_name
+        return ("", *_reset, comment, user_name)
 
     entry = {
         "feedback_id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
@@ -202,7 +205,7 @@ def save_user_feedback(
         with FEEDBACK_FILE.open("w", encoding="utf-8") as handle:
             json.dump(existing, handle, ensure_ascii=False, indent=2)
 
-    return "Feedback saved to `outputs/user_feedback.json`.", 3, render_star_rating_html(3), "", ""
+    return "Feedback saved to `outputs/user_feedback.json`.", 3, "★", "★", "★", "☆", "☆", "", ""
 
 
 # ── BUSINESS LOGIC ────────────────────────────────────────────────────
@@ -362,28 +365,28 @@ def refine_post(current_content, refinement_instruction, state):
 
         new_content   = response.content.strip()
         updated_state = {**state, "content": new_content}
-        
+
         old_wc = len(current_content.split())
         new_wc = len(new_content.split())
         gr.Info(f"✅ Refinement applied ({old_wc} → {new_wc} words)")
-        
-        return new_content, updated_state
+
+        return new_content, updated_state, word_count(new_content)
 
     except ValueError as e:
         error_msg = f"❌ Validation error: {str(e)}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
-        return current_content, state
+        return current_content, state, word_count(current_content)
     except RuntimeError as e:
         error_msg = f"❌ Refinement failed: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
-        return current_content, state
+        return current_content, state, word_count(current_content)
     except Exception as e:
         error_msg = f"❌ Unexpected error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
-        return current_content, state
+        return current_content, state, word_count(current_content)
 
 
 def approve_and_download(current_content, state):
@@ -600,15 +603,18 @@ body, .main { background: #050D1A !important; }
 }
 .feedback-rating-display { text-align: center; font-size: 32px; line-height: 1.1; letter-spacing: 0.1em; margin: 2px 0 10px; }
 .feedback-rating-visual { display: flex; justify-content: center; align-items: center; gap: 2px; }
-.feedback-star-filled { color: #F59E0B; }
+.feedback-star-filled { color: #B45309; }
 .feedback-star-empty  { color: #374151; }
 .feedback-star-row    { gap: 8px; justify-content: center; }
-.feedback-star-btn button {
+#feedback-panel .feedback-star-btn button,
+#feedback-panel .feedback-star-btn button span,
+#feedback-panel .feedback-star-btn button * {
     background: transparent !important; border: 0 !important; box-shadow: none !important;
-    color: #D97706 !important; font-size: 36px !important; line-height: 1 !important;
+    color: #B45309 !important; font-size: 36px !important; line-height: 1 !important;
     min-width: 0 !important; padding: 0 3px !important; transition: transform 0.12s ease, color 0.12s ease;
 }
-.feedback-star-btn button:hover { color: #F59E0B !important; transform: scale(1.12); }
+#feedback-panel .feedback-star-btn button:hover,
+#feedback-panel .feedback-star-btn button:hover span { color: #D97706 !important; transform: scale(1.12); }
 .status-box {
     background: #071B33; border: 1.5px solid #1A3A6E; border-radius: 10px;
     padding: 12px 14px; margin-top: 12px; font-size: 13px; color: #7EB3FF;
@@ -754,6 +760,49 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
                 size="lg",
             )
 
+            # ── Feedback ────────────────────────────────────────────
+            with gr.Group(elem_id="feedback-panel", elem_classes=["feedback-box"]):
+                gr.HTML('<div class="fb-section-label" style="color:#9A3412">User Feedback</div>')
+                feedback_status = gr.Markdown("")
+                feedback_rating_state = gr.State(3)
+                with gr.Row(elem_classes=["feedback-star-row"]):
+                    star_1 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_2 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_3 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_4 = gr.Button("☆", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_5 = gr.Button("☆", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                gr.HTML("""<script>
+(function() {
+  function paintStars() {
+    document.querySelectorAll('.feedback-star-btn button, .feedback-star-btn button span').forEach(function(el) {
+      el.style.setProperty('color', '#B45309', 'important');
+      el.style.setProperty('background', 'transparent', 'important');
+      el.style.setProperty('border', 'none', 'important');
+      el.style.setProperty('box-shadow', 'none', 'important');
+      el.style.setProperty('font-size', '32px', 'important');
+    });
+  }
+  setTimeout(paintStars, 300);
+  var obs = new MutationObserver(paintStars);
+  obs.observe(document.body, { childList: true, subtree: true });
+})();
+</script>""")
+                feedback_comment = gr.Textbox(
+                    label="Comment (optional)",
+                    placeholder="What should be improved?",
+                    lines=2,
+                )
+                feedback_name = gr.Textbox(
+                    label="User Name (optional)",
+                    placeholder="Your name",
+                    lines=1,
+                )
+                feedback_submit_btn = gr.Button(
+                    "Submit Feedback",
+                    elem_classes=["btn-generate"],
+                    size="sm",
+                )
+
         # ── RIGHT: Output + Refine + Approve ─────────────────────────
         with gr.Column(scale=3, min_width=400):
             gr.HTML('<div class="fb-section-label">Generated Content — edit directly in the box</div>')
@@ -805,38 +854,12 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
     # ── EVENT WIRING ─────────────────────────────────────────────────
 
-    with gr.Group(elem_id="feedback-panel", elem_classes=["feedback-box"]):
-        gr.HTML('<div class="fb-section-label" style="color:#9A3412">User Feedback</div>')
-        feedback_status = gr.Markdown("")
-        feedback_rating_state = gr.State(3)
-        feedback_rating_display = gr.HTML(render_star_rating_html(3), elem_classes=["feedback-rating-display"])
-        with gr.Row(elem_classes=["feedback-star-row"]):
-            star_1 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-            star_2 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-            star_3 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-            star_4 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-            star_5 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-        feedback_comment = gr.Textbox(
-            label="Comment (optional)",
-            placeholder="What should be improved?",
-            lines=2,
-        )
-        feedback_name = gr.Textbox(
-            label="User Name (optional)",
-            placeholder="Your name",
-            lines=1,
-        )
-        feedback_submit_btn = gr.Button(
-            "Submit Feedback",
-            elem_classes=["btn-generate"],
-            size="sm",
-        )
-
-    star_1.click(fn=lambda: set_feedback_rating(1), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
-    star_2.click(fn=lambda: set_feedback_rating(2), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
-    star_3.click(fn=lambda: set_feedback_rating(3), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
-    star_4.click(fn=lambda: set_feedback_rating(4), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
-    star_5.click(fn=lambda: set_feedback_rating(5), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
+    _star_outputs = [feedback_rating_state, star_1, star_2, star_3, star_4, star_5]
+    star_1.click(fn=lambda: set_feedback_rating(1), inputs=[], outputs=_star_outputs, queue=False)
+    star_2.click(fn=lambda: set_feedback_rating(2), inputs=[], outputs=_star_outputs, queue=False)
+    star_3.click(fn=lambda: set_feedback_rating(3), inputs=[], outputs=_star_outputs, queue=False)
+    star_4.click(fn=lambda: set_feedback_rating(4), inputs=[], outputs=_star_outputs, queue=False)
+    star_5.click(fn=lambda: set_feedback_rating(5), inputs=[], outputs=_star_outputs, queue=False)
 
     generate_btn.click(
         fn=generate_post,
@@ -848,7 +871,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
     refine_btn.click(
         fn=refine_post,
         inputs=[output_box, refine_input, content_state],
-        outputs=[output_box, content_state],
+        outputs=[output_box, content_state, word_count_display],
         queue=True,
     )
 
@@ -862,7 +885,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
     feedback_submit_btn.click(
         fn=save_user_feedback,
         inputs=[output_box, content_state, feedback_rating_state, feedback_comment, feedback_name],
-        outputs=[feedback_status, feedback_rating_state, feedback_rating_display, feedback_comment, feedback_name],
+        outputs=[feedback_status, feedback_rating_state, star_1, star_2, star_3, star_4, star_5, feedback_comment, feedback_name],
         queue=False,
     )
 
