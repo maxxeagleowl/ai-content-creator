@@ -23,6 +23,8 @@ from pipeline_components import (
     ContentPublisher,
     ContentReviewer,
     OutputManager,
+    normalize_text,
+    validate_generation_inputs,
     run_uniqueness,
 )
 
@@ -131,17 +133,10 @@ class ContentPipeline:
         auto_approve: bool = False,
     ) -> dict:
         """Run the full pipeline end-to-end with comprehensive error handling."""
+        topic, channel, audience = validate_generation_inputs(topic, channel, audience)
         self._header(topic, channel, audience)
         
         try:
-            # Validate inputs
-            if not topic or not topic.strip():
-                raise ValueError("Topic cannot be empty")
-            if channel not in ["blog", "instagram", "linkedin", "email_subject"]:
-                raise ValueError(f"Invalid channel: {channel}")
-            if audience not in ["performance_athlete", "fitness_enthusiast", "health_professional", "upgrader", "general"]:
-                raise ValueError(f"Invalid audience: {audience}")
-
             context = self.document(topic, audience)
             if not context or not any(context.values()):
                 raise RuntimeError("Failed to load knowledge base context")
@@ -209,7 +204,7 @@ class ContentPipeline:
                     results.append({"error": "Invalid request format"})
                     continue
                 
-                topic = req.get('topic', '').strip()
+                topic = normalize_text(req.get("topic"))
                 if not topic:
                     print(f"  ✗ [Batch {i}/{len(requests)}] Missing topic")
                     results.append({"error": "Missing topic"})

@@ -38,6 +38,7 @@ from prompt_templates import (
     build_writer_system_prompt,
     get_prompt_for_channel,
 )
+from pipeline_components import build_prompt_context
 
 # ── INIT ──────────────────────────────────────────────────────────────
 kb  = KnowledgeBase()
@@ -48,10 +49,30 @@ _feedback_lock = Lock()
 FEEDBACK_FILE = Path(__file__).parent / "outputs" / "user_feedback.json"
 
 def get_cached_context(topic: str, audience: str) -> dict:
-    key = f"{topic}:{audience}"
+    key = f"{kb.cache_token()}:{topic}:{audience}"
     if key not in _kb_cache:
         _kb_cache[key] = kb.full_context_for_generation(topic=topic, audience=audience)
     return _kb_cache[key]
+
+
+def build_generation_context(topic: str, channel: str, audience: str, kb_context: dict, custom_instructions: str = "") -> PromptContext:
+    return build_prompt_context(
+        topic=topic,
+        channel=channel,
+        audience=audience,
+        context=kb_context,
+        extra_instructions=custom_instructions,
+    )
+
+
+def build_refine_context(state: dict) -> PromptContext:
+    return PromptContext(
+        topic=state.get("topic", ""),
+        channel=state.get("channel", "blog"),
+        audience=state.get("audience", "fitness_enthusiast"),
+        brand_identity=state.get("brand_identity", ""),
+        audience_insights=state.get("audience_insights", ""),
+    )
 
 AUDIENCES = {
     "Fitness Enthusiast":                   "fitness_enthusiast",
@@ -177,6 +198,21 @@ def word_count(text: str) -> str:
     return f"{len(text.split())} words"
 
 
+def _reject_generation(message: str) -> tuple[str, dict, str]:
+    gr.Warning(message)
+    return "", {}, "0 words"
+
+
+def _reject_refinement(message: str, current_content: str, state: dict) -> tuple[str, dict, str]:
+    gr.Warning(message)
+    return current_content, state, word_count(current_content)
+
+
+def _reject_download(message: str) -> None:
+    gr.Warning(message)
+    return None
+
+
 def get_channel_config(channel: str) -> dict:
     return CHANNEL_CONFIG.get(channel, CHANNEL_CONFIG["blog"])
 
@@ -300,18 +336,15 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
     wc      : str          ? word_count_display
     """
     if not topic.strip():
-        gr.Warning("??  Please enter a topic before generating.")
-        return "", {}, "0 words"
+        return _reject_generation("??  Please enter a topic before generating.")
 
     try:
         topic = topic.strip()
         if len(topic) < 3:
-            gr.Warning("??  Topic must be at least 3 characters.")
-            return "", {}, "0 words"
+            return _reject_generation("??  Topic must be at least 3 characters.")
 
         if len(topic) > 200:
-            gr.Warning("??  Topic must be under 200 characters.")
-            return "", {}, "0 words"
+            return _reject_generation("??  Topic must be under 200 characters.")
 
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
         channel = CHANNELS.get(channel_label, "blog")
@@ -324,20 +357,7 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             return "", {}, "0 words"
 
         gr.Info("?? Building prompt context...")
-        ctx = PromptContext(
-            topic=topic,
-            channel=channel,
-            audience=audience,
-            brand_identity=context["brand_identity"],
-            brand_voice=context["brand_voice"],
-            writing_rules=context["writing_rules"],
-            content_examples=context["content_examples"],
-            product_specs=context["product_specs"],
-            market_context=context["market_context"],
-            differentiators=context["differentiators"],
-            audience_insights=context["audience_insights"],
-            extra_instructions=custom_instructions or "",
-        )
+        ctx = build_generation_context(topic, channel, audience, context, custom_instructions or "")
 
         system_prompt, user_prompt = get_prompt_for_channel(ctx, brief="")
 
@@ -354,13 +374,11 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
         )
 
         if not response or not response.content:
-            gr.Error("? LLM returned empty response. Please try again.")
-            return "", {}, "0 words"
+            return _reject_generation("? LLM returned empty response. Please try again.")
 
         content = response.content.strip()
         if not content:
-            gr.Error("? Generated content is empty. Please try again.")
-            return "", {}, "0 words"
+            return _reject_generation("? Generated content is empty. Please try again.")
 
         state = {
             "topic": topic,
@@ -424,15 +442,7 @@ def refine_post(current_content, refinement_instruction, state):
         gr.Info("🔄 Applying refinement...")
         response = llm.generate(
             user_prompt=refine_prompt,
-            system_prompt=build_writer_system_prompt(
-                PromptContext(
-                    topic=state.get("topic", ""),
-                    channel=state.get("channel", "blog"),
-                    audience=state.get("audience", "fitness_enthusiast"),
-                    brand_identity=state.get("brand_identity", ""),
-                    audience_insights=state.get("audience_insights", ""),
-                )
-            ),
+            system_prompt=build_writer_system_prompt(build_refine_context(state)),
             temperature=0.65,
             max_tokens=600,
             timeout=45,

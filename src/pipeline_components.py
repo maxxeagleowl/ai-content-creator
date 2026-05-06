@@ -29,6 +29,36 @@ from prompt_templates import (
 OUTPUT_DIR = Path(__file__).parent.parent / "outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+VALID_CHANNELS = {"blog", "instagram", "linkedin", "email_subject"}
+VALID_AUDIENCES = {
+    "performance_athlete",
+    "fitness_enthusiast",
+    "health_professional",
+    "upgrader",
+    "general",
+}
+
+
+def normalize_text(value) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def validate_generation_inputs(topic: str, channel: str, audience: str) -> tuple[str, str, str]:
+    topic = normalize_text(topic)
+    channel = normalize_text(channel)
+    audience = normalize_text(audience)
+
+    if not topic:
+        raise ValueError("Topic cannot be empty")
+    if channel not in VALID_CHANNELS:
+        raise ValueError(f"Invalid channel: {channel}")
+    if audience not in VALID_AUDIENCES:
+        raise ValueError(f"Invalid audience: {audience}")
+
+    return topic, channel, audience
+
 
 def _parse_json_response(text: str) -> dict:
     """Parse JSON from a model response, with fenced-block fallback."""
@@ -59,17 +89,17 @@ def build_prompt_context(
 ) -> PromptContext:
     """Create a PromptContext from a knowledge-base context dict."""
     return PromptContext(
-        topic=topic,
-        channel=channel,
-        audience=audience,
-        brand_identity=context.get("brand_identity", ""),
-        brand_voice=context.get("brand_voice", ""),
-        writing_rules=context.get("writing_rules", ""),
-        content_examples=context.get("content_examples", ""),
-        product_specs=context.get("product_specs", ""),
-        market_context=context.get("market_context", ""),
-        differentiators=context.get("differentiators", ""),
-        audience_insights=context.get("audience_insights", ""),
+        topic=normalize_text(topic),
+        channel=normalize_text(channel),
+        audience=normalize_text(audience),
+        brand_identity=normalize_text(context.get("brand_identity")),
+        brand_voice=normalize_text(context.get("brand_voice")),
+        writing_rules=normalize_text(context.get("writing_rules")),
+        content_examples=normalize_text(context.get("content_examples")),
+        product_specs=normalize_text(context.get("product_specs")),
+        market_context=normalize_text(context.get("market_context")),
+        differentiators=normalize_text(context.get("differentiators")),
+        audience_insights=normalize_text(context.get("audience_insights")),
         extra_instructions=extra_instructions or "",
     )
 
@@ -81,7 +111,9 @@ class ContentDocumenter:
     def document(self, topic: str, audience: str) -> dict:
         """Load knowledge base context with error handling."""
         try:
-            if not topic or not topic.strip():
+            topic = normalize_text(topic)
+            audience = normalize_text(audience)
+            if not topic:
                 raise ValueError("Topic cannot be empty")
             
             context = self.kb.full_context_for_generation(topic=topic, audience=audience)
@@ -109,7 +141,8 @@ class ContentMonitor:
     def analyze(self, topic: str, context: dict) -> dict:
         """Analyze topic for brand fit with error handling."""
         try:
-            if not topic or not topic.strip():
+            topic = normalize_text(topic)
+            if not topic:
                 raise ValueError("Topic cannot be empty")
             
             if not context or not isinstance(context, dict):
@@ -163,8 +196,7 @@ class ContentBriefGenerator:
     def generate(self, topic: str, channel: str, audience: str, context: dict) -> str:
         """Generate content brief with error handling."""
         try:
-            if not topic or not topic.strip():
-                raise ValueError("Topic cannot be empty")
+            topic, channel, audience = validate_generation_inputs(topic, channel, audience)
             if not context:
                 raise ValueError("Context cannot be empty")
             
@@ -194,10 +226,7 @@ class ContentPublisher:
     def publish(self, topic: str, channel: str, audience: str, context: dict, brief: str) -> str:
         """Generate final content with error handling."""
         try:
-            if not topic or not topic.strip():
-                raise ValueError("Topic cannot be empty")
-            if not channel:
-                raise ValueError("Channel cannot be empty")
+            topic, channel, audience = validate_generation_inputs(topic, channel, audience)
             if not context:
                 raise ValueError("Context cannot be empty")
             
@@ -378,7 +407,7 @@ class ContentReviewer:
 
 def build_uniqueness_context(topic: str, channel: str, context: dict) -> PromptContext:
     """Create the context used for comparison runs."""
-    return build_prompt_context(topic, channel, "fitness_enthusiast", context)
+    return build_prompt_context(normalize_text(topic), normalize_text(channel), "fitness_enthusiast", context)
 
 
 def run_uniqueness(topic: str, channel: str, context: dict, llm: object) -> dict:
