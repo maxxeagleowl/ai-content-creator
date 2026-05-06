@@ -172,7 +172,9 @@ Run it with `jupyter notebook fitbyte_ai_content_creator.ipynb`.
 
 ### Kanban
 
-Task planning and sprint tracking for this project is managed on the GitHub Projects board linked to this repository. The board tracks backlog, in-progress and completed items across pipeline development, prompt engineering, UI, and evaluation.
+Task planning and sprint tracking for this project is managed on the Project Trello board. The board tracks backlog, in-progress and completed items across pipeline development, prompt engineering, UI, and evaluation.
+
+Screenshots are located at `kanban/`. Different Porgress stages with the comments as last charackters for End of Day 1, 2 and final
 
 ### Human-in-the-Loop Evaluation
 
@@ -199,6 +201,4 @@ Shows the concrete differences across six dimensions: tone, product mention styl
 
 **Main finding:** The FitByte system consistently uses named product features ("Sleep Score", "Recovery Score"), avoids generic motivational language, and matches the exact sentence structure of real FitByte posts. The generic output uses vague references, lists, and promotional phrasing that FitByte's brand guidelines explicitly prohibit.
 
----
-
-Built for Ironhack Data Analytics Bootcamp — Module 2 Project
+### 
