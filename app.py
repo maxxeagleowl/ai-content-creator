@@ -38,6 +38,7 @@ from prompt_templates import (
     build_writer_system_prompt,
     get_prompt_for_channel,
 )
+from pipeline_components import build_prompt_context
 
 # ── INIT ──────────────────────────────────────────────────────────────
 kb  = KnowledgeBase()
@@ -48,10 +49,30 @@ _feedback_lock = Lock()
 FEEDBACK_FILE = Path(__file__).parent / "outputs" / "user_feedback.json"
 
 def get_cached_context(topic: str, audience: str) -> dict:
-    key = f"{topic}:{audience}"
+    key = f"{kb.cache_token()}:{topic}:{audience}"
     if key not in _kb_cache:
         _kb_cache[key] = kb.full_context_for_generation(topic=topic, audience=audience)
     return _kb_cache[key]
+
+
+def build_generation_context(topic: str, channel: str, audience: str, kb_context: dict, custom_instructions: str = "") -> PromptContext:
+    return build_prompt_context(
+        topic=topic,
+        channel=channel,
+        audience=audience,
+        context=kb_context,
+        extra_instructions=custom_instructions,
+    )
+
+
+def build_refine_context(state: dict) -> PromptContext:
+    return PromptContext(
+        topic=state.get("topic", ""),
+        channel=state.get("channel", "blog"),
+        audience=state.get("audience", "fitness_enthusiast"),
+        brand_identity=state.get("brand_identity", ""),
+        audience_insights=state.get("audience_insights", ""),
+    )
 
 AUDIENCES = {
     "Fitness Enthusiast":                   "fitness_enthusiast",
@@ -177,6 +198,21 @@ def word_count(text: str) -> str:
     return f"{len(text.split())} words"
 
 
+def _reject_generation(message: str) -> tuple[str, dict, str]:
+    gr.Warning(message)
+    return "", {}, "0 words"
+
+
+def _reject_refinement(message: str, current_content: str, state: dict) -> tuple[str, dict, str]:
+    gr.Warning(message)
+    return current_content, state, word_count(current_content)
+
+
+def _reject_download(message: str) -> None:
+    gr.Warning(message)
+    return None
+
+
 def get_channel_config(channel: str) -> dict:
     return CHANNEL_CONFIG.get(channel, CHANNEL_CONFIG["blog"])
 
@@ -217,8 +253,17 @@ def render_star_rating_html(rating: int) -> str:
 
 def set_feedback_rating(rating: int) -> tuple:
     v = max(1, min(5, int(rating)))
-    labels = ["★" if i <= v else "☆" for i in range(1, 6)]
-    return (v, *labels)
+    html = _star_html(v)
+    return (v, html)
+
+
+def _star_html(v: int) -> str:
+    stars = "".join(
+        '<span style="color:#F59E0B;font-size:36px;line-height:1;">&#9733;</span>' if i <= v
+        else '<span style="color:#4B5563;font-size:36px;line-height:1;">&#9734;</span>'
+        for i in range(1, 6)
+    )
+    return f'<div style="display:flex;justify-content:center;gap:6px;margin:6px 0;">{stars}</div>'
 
 
 def save_user_feedback(
@@ -233,7 +278,7 @@ def save_user_feedback(
 
     Returns a status message plus cleared optional fields.
     """
-    _reset = (3, "★", "★", "★", "☆", "☆")
+    _reset = (3, _star_html(3))
 
     if not current_content or not current_content.strip():
         gr.Warning("Generate a post first before submitting feedback.")
@@ -284,7 +329,7 @@ def save_user_feedback(
         with FEEDBACK_FILE.open("w", encoding="utf-8") as handle:
             json.dump(existing, handle, ensure_ascii=False, indent=2)
 
-    return "Feedback saved to `outputs/user_feedback.json`.", 3, "★", "★", "★", "☆", "☆", "", ""
+    return "Feedback saved to `outputs/user_feedback.json`.", 3, _star_html(3), "", ""
 
 
 # ── BUSINESS LOGIC ────────────────────────────────────────────────────
@@ -300,51 +345,35 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
     wc      : str          ? word_count_display
     """
     if not topic.strip():
-        gr.Warning("??  Please enter a topic before generating.")
-        return "", {}, "0 words"
+        return _reject_generation("ERROR: Please enter a topic before generating.")
+
 
     try:
         topic = topic.strip()
         if len(topic) < 3:
-            gr.Warning("??  Topic must be at least 3 characters.")
-            return "", {}, "0 words"
+            return _reject_generation("ERROR: Topic must be at least 3 characters.")
 
         if len(topic) > 200:
-            gr.Warning("??  Topic must be under 200 characters.")
-            return "", {}, "0 words"
-
+            return _reject_generation("ERROR: Topic must be under 200 characters.")
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
         channel = CHANNELS.get(channel_label, "blog")
         channel_config = get_channel_config(channel)
-        gr.Info("?? Loading knowledge base...")
+        gr.Info("INFO: Loading knowledge base...")
         context = get_cached_context(topic, audience)
 
         if not context or not any(context.values()):
-            gr.Error("? Failed to load knowledge base. Please check the knowledge_base/ folder.")
+            gr.Error("ERROR: Failed to load knowledge base. Please check the knowledge_base/ folder.")
             return "", {}, "0 words"
 
-        gr.Info("?? Building prompt context...")
-        ctx = PromptContext(
-            topic=topic,
-            channel=channel,
-            audience=audience,
-            brand_identity=context["brand_identity"],
-            brand_voice=context["brand_voice"],
-            writing_rules=context["writing_rules"],
-            content_examples=context["content_examples"],
-            product_specs=context["product_specs"],
-            market_context=context["market_context"],
-            differentiators=context["differentiators"],
-            audience_insights=context["audience_insights"],
-            extra_instructions=custom_instructions or "",
-        )
+        gr.Info("INFO: Building prompt context...")
+        ctx = build_generation_context(topic, channel, audience, context, custom_instructions or "")
 
         system_prompt, user_prompt = get_prompt_for_channel(ctx, brief="")
 
         if custom_instructions.strip():
             user_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_instructions.strip()}"
 
-        gr.Info(f"? Generating {channel_config['label']}... (this may take 10-20 seconds)")
+        gr.Info(f"INFO: Generating {channel_config['label']}... (this may take 10-20 seconds)")
         response = llm.generate(
             user_prompt=user_prompt,
             system_prompt=system_prompt,
@@ -354,13 +383,11 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
         )
 
         if not response or not response.content:
-            gr.Error("? LLM returned empty response. Please try again.")
-            return "", {}, "0 words"
+            return _reject_generation("ERROR: LLM returned empty response. Please try again.")
 
         content = response.content.strip()
         if not content:
-            gr.Error("? Generated content is empty. Please try again.")
-            return "", {}, "0 words"
+            return _reject_generation("ERROR: Generated content is empty. Please try again.")
 
         state = {
             "topic": topic,
@@ -373,22 +400,22 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             "audience_insights": context["audience_insights"][:600],
         }
 
-        status_msg = f"? Content generated successfully. ({len(content.split())} words)"
+        status_msg = f"SUCCESS: Content generated successfully. ({len(content.split())} words)"
         gr.Info(status_msg)
         return content, state, word_count(content)
 
     except ValueError as e:
-        error_msg = f"? Validation error: {str(e)}"
+        error_msg = f"ERROR: Validation error: {str(e)}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
     except RuntimeError as e:
-        error_msg = f"? {str(e)[:100]}"
+        error_msg = f"ERROR: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
     except Exception as e:
-        error_msg = f"? Unexpected error: {str(e)[:100]}"
+        error_msg = f"ERROR: Unexpected error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
@@ -402,44 +429,36 @@ def refine_post(current_content, refinement_instruction, state):
     Returns : new_content → output_box  |  updated_state → content_state
     """
     if not current_content.strip():
-        gr.Warning("⚠️  Generate a post first before refining.")
+        gr.Warning("WARNING: Generate a post first before refining.")
         return current_content, state
 
     if not refinement_instruction.strip():
-        gr.Warning("⚠️  Enter a refinement instruction (e.g., 'make it shorter' or 'add more emojis').")
+        gr.Warning("WARNING: Enter a refinement instruction (e.g., 'make it shorter' or 'add more emojis').")
         return current_content, state
 
     if not state or not isinstance(state, dict):
-        gr.Warning("⚠️  No generation context found — please generate a post first.")
+        gr.Warning("WARNING: No generation context found - please generate a post first.")
         return current_content, state
 
     try:
         # Validate instruction length
         if len(refinement_instruction) > 300:
-            gr.Warning("⚠️  Refinement instruction is too long (max 300 characters).")
+            gr.Warning("WARNING: Refinement instruction is too long (max 300 characters).")
             return current_content, state
 
         refine_prompt = build_refine_prompt(current_content, refinement_instruction, state)
         
-        gr.Info("🔄 Applying refinement...")
+        gr.Info("INFO: Applying refinement...")
         response = llm.generate(
             user_prompt=refine_prompt,
-            system_prompt=build_writer_system_prompt(
-                PromptContext(
-                    topic=state.get("topic", ""),
-                    channel=state.get("channel", "blog"),
-                    audience=state.get("audience", "fitness_enthusiast"),
-                    brand_identity=state.get("brand_identity", ""),
-                    audience_insights=state.get("audience_insights", ""),
-                )
-            ),
+            system_prompt=build_writer_system_prompt(build_refine_context(state)),
             temperature=0.65,
             max_tokens=600,
             timeout=45,
         )
 
         if not response or not response.content.strip():
-            gr.Error("❌ Failed to refine post. Please try again or regenerate from scratch.")
+            gr.Error("ERROR: Failed to refine post. Please try again or regenerate from scratch.")
             return current_content, state
 
         new_content   = response.content.strip()
@@ -447,22 +466,22 @@ def refine_post(current_content, refinement_instruction, state):
 
         old_wc = len(current_content.split())
         new_wc = len(new_content.split())
-        gr.Info(f"✅ Refinement applied ({old_wc} → {new_wc} words)")
+        gr.Info(f"SUCCESS: Refinement applied ({old_wc} -> {new_wc} words)")
 
         return new_content, updated_state, word_count(new_content)
 
     except ValueError as e:
-        error_msg = f"❌ Validation error: {str(e)}"
+        error_msg = f"ERROR: Validation error: {str(e)}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
         return current_content, state, word_count(current_content)
     except RuntimeError as e:
-        error_msg = f"❌ Refinement failed: {str(e)[:100]}"
+        error_msg = f"ERROR: Refinement failed: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
         return current_content, state, word_count(current_content)
     except Exception as e:
-        error_msg = f"❌ Unexpected error: {str(e)[:100]}"
+        error_msg = f"ERROR: Unexpected error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
         return current_content, state, word_count(current_content)
@@ -477,22 +496,22 @@ def approve_and_download(current_content, state):
     """
     content = current_content.strip()
     if not content:
-        gr.Warning("⚠️  Nothing to download — generate a post first.")
+        gr.Warning("WARNING: Nothing to download - generate a post first.")
         return None
+
 
     try:
         # Validate content
         if len(content) < 5:
-            gr.Warning("⚠️  Content is too short to save.")
+            gr.Warning("WARNING: Content is too short to save.")
             return None
 
         topic         = state.get("topic", "post") if state else "post"
         channel_label = state.get("channel_label", "Blog Post") if state else "Blog Post"
         channel       = state.get("channel", "blog") if state else "blog"
 
-        # Validate state
         if not state or not isinstance(state, dict):
-            gr.Warning("⚠️  No state information available.")
+            gr.Warning("WARNING: No state information available.")
             return None
 
         try:
@@ -500,7 +519,7 @@ def approve_and_download(current_content, state):
                 mode="w", suffix=".txt", delete=False,
                 prefix=f"fitbyte_{channel}_"
             )
-            tmp.write("FitByte Content — Approved\n")
+            tmp.write("FitByte Content - Approved\n")
             tmp.write(f"Topic:   {topic}\n")
             tmp.write(f"Channel: {channel_label}\n")
             tmp.write(f"Date:    {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
@@ -508,7 +527,7 @@ def approve_and_download(current_content, state):
             tmp.write(content)
             tmp.close()
 
-            gr.Info(f"✅ File saved successfully! ({len(content.split())} words)")
+            gr.Info(f"SUCCESS: File saved successfully! ({len(content.split())} words)")
             print(f"  Saved to: {tmp.name}")
             return tmp.name
 
@@ -516,17 +535,17 @@ def approve_and_download(current_content, state):
             raise RuntimeError(f"Failed to write file: {e}")
             
     except IOError as e:
-        error_msg = f"❌ File I/O error: {str(e)[:100]}"
+        error_msg = f"ERROR: File I/O error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in approve_and_download: {e}")
         return None
     except ValueError as e:
-        error_msg = f"❌ Invalid data: {str(e)[:100]}"
+        error_msg = f"ERROR: Invalid data: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in approve_and_download: {e}")
         return None
     except Exception as e:
-        error_msg = f"❌ Failed to save file: {str(e)[:100]}"
+        error_msg = f"ERROR: Failed to save file: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in approve_and_download: {e}")
         return None
@@ -685,15 +704,14 @@ body, .main { background: #050D1A !important; }
 .feedback-star-filled { color: #B45309; }
 .feedback-star-empty  { color: #374151; }
 .feedback-star-row    { gap: 8px; justify-content: center; }
-#feedback-panel .feedback-star-btn button,
-#feedback-panel .feedback-star-btn button span,
-#feedback-panel .feedback-star-btn button * {
-    background: transparent !important; border: 0 !important; box-shadow: none !important;
-    color: #B45309 !important; font-size: 36px !important; line-height: 1 !important;
-    min-width: 0 !important; padding: 0 3px !important; transition: transform 0.12s ease, color 0.12s ease;
+#feedback-panel .feedback-star-btn button {
+    background: rgba(255,255,255,0.07) !important; border: 1px solid rgba(255,255,255,0.15) !important;
+    box-shadow: none !important; color: #9CA3AF !important;
+    font-size: 12px !important; line-height: 1 !important;
+    min-width: 32px !important; padding: 4px 6px !important;
+    border-radius: 6px !important; transition: background 0.12s ease;
 }
-#feedback-panel .feedback-star-btn button:hover,
-#feedback-panel .feedback-star-btn button:hover span { color: #D97706 !important; transform: scale(1.12); }
+#feedback-panel .feedback-star-btn button:hover { background: rgba(245,158,11,0.2) !important; color: #F59E0B !important; }
 .status-box {
     background: #071B33; border: 1.5px solid #1A3A6E; border-radius: 10px;
     padding: 12px 14px; margin-top: 12px; font-size: 13px; color: #7EB3FF;
@@ -844,28 +862,13 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
                 gr.HTML('<div class="fb-section-label" style="color:#9A3412">User Feedback</div>')
                 feedback_status = gr.Markdown("")
                 feedback_rating_state = gr.State(3)
+                star_display = gr.HTML(_star_html(3))
                 with gr.Row(elem_classes=["feedback-star-row"]):
-                    star_1 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_2 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_3 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_4 = gr.Button("☆", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_5 = gr.Button("☆", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                gr.HTML("""<script>
-(function() {
-  function paintStars() {
-    document.querySelectorAll('.feedback-star-btn button, .feedback-star-btn button span').forEach(function(el) {
-      el.style.setProperty('color', '#B45309', 'important');
-      el.style.setProperty('background', 'transparent', 'important');
-      el.style.setProperty('border', 'none', 'important');
-      el.style.setProperty('box-shadow', 'none', 'important');
-      el.style.setProperty('font-size', '32px', 'important');
-    });
-  }
-  setTimeout(paintStars, 300);
-  var obs = new MutationObserver(paintStars);
-  obs.observe(document.body, { childList: true, subtree: true });
-})();
-</script>""")
+                    star_1 = gr.Button("1", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_2 = gr.Button("2", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_3 = gr.Button("3", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_4 = gr.Button("4", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_5 = gr.Button("5", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
                 feedback_comment = gr.Textbox(
                     label="Comment (optional)",
                     placeholder="What should be improved?",
@@ -933,7 +936,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
     # ── EVENT WIRING ─────────────────────────────────────────────────
 
-    _star_outputs = [feedback_rating_state, star_1, star_2, star_3, star_4, star_5]
+    _star_outputs = [feedback_rating_state, star_display]
     star_1.click(fn=lambda: set_feedback_rating(1), inputs=[], outputs=_star_outputs, queue=False)
     star_2.click(fn=lambda: set_feedback_rating(2), inputs=[], outputs=_star_outputs, queue=False)
     star_3.click(fn=lambda: set_feedback_rating(3), inputs=[], outputs=_star_outputs, queue=False)
@@ -964,7 +967,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
     feedback_submit_btn.click(
         fn=save_user_feedback,
         inputs=[output_box, content_state, feedback_rating_state, feedback_comment, feedback_name],
-        outputs=[feedback_status, feedback_rating_state, star_1, star_2, star_3, star_4, star_5, feedback_comment, feedback_name],
+        outputs=[feedback_status, feedback_rating_state, star_display, feedback_comment, feedback_name],
         queue=False,
     )
 

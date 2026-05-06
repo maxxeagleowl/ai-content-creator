@@ -34,31 +34,58 @@ class KnowledgeBase:
     def __init__(self, kb_root: Path = KB_ROOT):
         self.primary = kb_root / "primary"
         self.secondary = kb_root / "secondary"
-        self._cache: dict[str, str] = {}
-        self._raw_cache: dict[str, str] = {}
+        self._cache: dict[str, tuple[int, str]] = {}
+        self._raw_cache: dict[str, tuple[int, str]] = {}
+
+    @staticmethod
+    def _mtime_ns(path: Path) -> int:
+        return path.stat().st_mtime_ns
+
+    @staticmethod
+    def _cached_text(cache: dict[str, tuple[int, str]], path: Path, loader) -> str:
+        key = str(path)
+        mtime_ns = KnowledgeBase._mtime_ns(path)
+        cached = cache.get(key)
+        if cached and cached[0] == mtime_ns:
+            return cached[1]
+
+        value = loader(path)
+        cache[key] = (mtime_ns, value)
+        return value
+
+    def cache_token(self) -> str:
+        """Return a lightweight token that changes when any source KB file changes."""
+        paths = [
+            self.primary / "fitbyte_brand_guidelines.md",
+            self.primary / "fitbyte_product_specs.md",
+            self.primary / "past_content" / "fitbyte_content_examples.md",
+            self.secondary / "market_trends.md",
+            self.secondary / "competitor_analysis.md",
+        ]
+        return "|".join(str(self._mtime_ns(path)) for path in paths)
 
     def _load(self, path: Path) -> str:
-        key = str(path)
-        if key not in self._cache:
+        def _load_clean(target: Path) -> str:
             try:
-                self._cache[key] = load_and_clean(path)
+                return load_and_clean(target)
             except FileNotFoundError:
-                raise FileNotFoundError(f"Knowledge base file not found: {path}")
+                raise FileNotFoundError(f"Knowledge base file not found: {target}")
             except Exception as e:
-                raise RuntimeError(f"Error loading knowledge base {path.name}: {e}")
-        return self._cache[key]
+                raise RuntimeError(f"Error loading knowledge base {target.name}: {e}")
+
+        return self._cached_text(self._cache, path, _load_clean)
 
     def _load_raw(self, path: Path) -> str:
         """Load raw markdown once and reuse it across section extractors."""
-        key = str(path)
-        if key not in self._raw_cache:
+        def _load_raw_text(target: Path) -> str:
             try:
-                self._raw_cache[key] = load_file(path)
+                return load_file(target)
             except FileNotFoundError:
-                raise FileNotFoundError(f"Knowledge base file not found: {path}")
+                raise FileNotFoundError(f"Knowledge base file not found: {target}")
             except Exception as e:
-                raise RuntimeError(f"Error loading knowledge base {path.name}: {e}")
-        return self._raw_cache[key]
+                raise RuntimeError(f"Error loading knowledge base {target.name}: {e}")
+
+        return self._cached_text(self._raw_cache, path, _load_raw_text)
 
     @staticmethod
     def _bundle_sections(raw: str, sections: list[str], fallback: str = "") -> str:
