@@ -476,99 +476,148 @@ def find_free_port(start_port=7860, max_attempts=25):
 # ── CSS ───────────────────────────────────────────────────────────────
 
 FITBYTE_CSS = """
-.gradio-container { font-family: 'Inter', sans-serif !important; }
+.gradio-container { font-family: 'Inter', 'Segoe UI', sans-serif !important; background: #050D1A !important; }
+body, .main { background: #050D1A !important; }
 
+/* ── Header ── */
 .fb-header {
-    background: linear-gradient(135deg, #1A56DB 0%, #0F3D9E 100%);
-    border-radius: 14px; padding: 28px 32px 20px; margin-bottom: 4px; color: white;
+    background: linear-gradient(135deg, #071D40 0%, #0F3380 55%, #1A56DB 100%);
+    border-radius: 18px; padding: 36px 44px; margin-bottom: 20px; color: white;
+    position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    min-height: 190px;
 }
-.fb-header h1 { font-size: 28px; font-weight: 700; margin: 0 0 4px 0; letter-spacing: -0.5px; }
-.fb-header p  { font-size: 15px; opacity: 0.85; margin: 0; }
+.fb-header::before {
+    content: ''; position: absolute; top: -80px; left: -40px;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(96,165,250,0.14) 0%, transparent 70%);
+    border-radius: 50%; pointer-events: none;
+}
+.fb-header::after {
+    content: ''; position: absolute; bottom: -110px; right: 170px;
+    width: 340px; height: 340px;
+    background: radial-gradient(circle, rgba(147,197,253,0.08) 0%, transparent 70%);
+    border-radius: 50%; pointer-events: none;
+}
+.fb-header-left { flex: 1; position: relative; z-index: 1; }
+.fb-header-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 20px; padding: 4px 14px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 14px;
+    color: rgba(255,255,255,0.88);
+}
+.fb-header h1 {
+    font-size: 34px; font-weight: 800; margin: 0 0 10px 0;
+    letter-spacing: -1px; line-height: 1.1;
+}
+.fb-header p {
+    font-size: 14.5px; opacity: 0.72; margin: 0; max-width: 440px; line-height: 1.55;
+}
+.fb-header-right { flex-shrink: 0; position: relative; z-index: 1; }
 
+@keyframes watchFloat {
+    0%, 100% { transform: translateY(0px) rotate(-4deg); }
+    50%       { transform: translateY(-10px) rotate(-4deg); }
+}
+.fb-watch-svg {
+    filter: drop-shadow(0 14px 30px rgba(0,0,0,0.5));
+    animation: watchFloat 4.5s ease-in-out infinite;
+    display: block;
+}
+
+/* ── Section labels ── */
 .fb-section-label {
-    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #6B7280; margin-bottom: 6px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #4A7CBF; margin-bottom: 8px;
 }
 
-.btn-generate { background: #1A56DB !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; }
-.btn-generate:hover { background: #1447C0 !important; }
-.btn-refine   { background: #F59E0B !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; }
-.btn-refine:hover { background: #D97706 !important; }
-.btn-approve  { background: #10B981 !important; color: white !important; font-weight: 600 !important; border-radius: 8px !important; font-size: 15px !important; padding: 12px 28px !important; }
-.btn-approve:hover { background: #059669 !important; }
+/* ── Buttons ── */
+.btn-generate { background: linear-gradient(135deg, #1A56DB 0%, #1447C0 100%) !important; color: white !important; font-weight: 600 !important; border-radius: 10px !important; box-shadow: 0 4px 14px rgba(26,86,219,0.32) !important; border: none !important; transition: all 0.18s ease !important; }
+.btn-generate:hover { background: linear-gradient(135deg, #1447C0 0%, #0F3D9E 100%) !important; box-shadow: 0 6px 18px rgba(26,86,219,0.42) !important; transform: translateY(-1px) !important; }
+.btn-refine { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important; color: white !important; font-weight: 600 !important; border-radius: 10px !important; box-shadow: 0 4px 14px rgba(245,158,11,0.32) !important; border: none !important; transition: all 0.18s ease !important; }
+.btn-refine:hover { background: linear-gradient(135deg, #D97706 0%, #B45309 100%) !important; transform: translateY(-1px) !important; }
+.btn-approve { background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important; color: white !important; font-weight: 600 !important; border-radius: 10px !important; font-size: 15px !important; padding: 12px 28px !important; box-shadow: 0 4px 14px rgba(16,185,129,0.32) !important; border: none !important; transition: all 0.18s ease !important; }
+.btn-approve:hover { background: linear-gradient(135deg, #059669 0%, #047857 100%) !important; transform: translateY(-1px) !important; }
 
+/* ── Dark-blue input & dropdown fields ── */
+.gradio-container input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+.gradio-container textarea {
+    background: #071B33 !important;
+    border: 1.5px solid #1A3A6E !important;
+    color: #BFD4F0 !important;
+    border-radius: 10px !important;
+}
+.gradio-container input::placeholder,
+.gradio-container textarea::placeholder {
+    color: #2D507A !important;
+}
+.gradio-container input:focus,
+.gradio-container textarea:focus {
+    border-color: #3B82F6 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.18) !important;
+}
+/* Dropdown wrapper */
+.gradio-container .wrap {
+    background: #071B33 !important;
+    border: 1.5px solid #1A3A6E !important;
+    color: #BFD4F0 !important;
+}
+.gradio-container .wrap:focus-within { border-color: #3B82F6 !important; }
+.gradio-container .wrap span, .gradio-container .wrap input { color: #BFD4F0 !important; }
+/* Dropdown list */
+.gradio-container ul.options, .gradio-container .options {
+    background: #0B2040 !important;
+    border: 1px solid #1A3A6E !important;
+}
+.gradio-container ul.options li, .gradio-container .options li { color: #BFD4F0 !important; }
+.gradio-container ul.options li:hover, .gradio-container .options .active { background: #1A3A6E !important; }
+/* Field labels */
+.gradio-container label > span,
+.gradio-container .label-wrap span { color: #5B8EC9 !important; }
+
+/* ── Output textbox ── */
 .output-textarea textarea {
     font-size: 15px !important; line-height: 1.7 !important;
-    border-radius: 10px !important; border: 1.5px solid #E5E7EB !important;
-    background: white !important; color: #000000 !important;
+    border-radius: 12px !important; border: 1.5px solid #1A3A6E !important;
+    background: #071B33 !important; color: #BFD4F0 !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3) !important;
 }
 .output-textarea textarea:focus {
-    border-color: #1A56DB !important; background: white !important; color: #000000 !important;
-    box-shadow: 0 0 0 3px rgba(26,86,219,0.08) !important;
+    border-color: #3B82F6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.18) !important;
 }
-.output-textarea textarea::placeholder { color: #999999 !important; }
+.output-textarea textarea::placeholder { color: #2D507A !important; }
 
-.refine-box  { background: #FFFBEB; border: 1.5px solid #FDE68A; border-radius: 10px; padding: 16px; }
-.approve-box { background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 10px; padding: 16px; }
+/* ── Panels ── */
+.refine-box  { background: #150E00; border: 2px solid #B45309; border-radius: 12px; padding: 16px; box-shadow: 0 2px 12px rgba(180,83,9,0.18); }
+.approve-box { background: #001A0A; border: 2px solid #047857; border-radius: 12px; padding: 16px; box-shadow: 0 2px 12px rgba(4,120,87,0.18); }
 .feedback-box {
-    background: #FFF7ED;
-    border: 1.5px solid #FDBA74;
-    border-radius: 10px;
-    padding: 16px;
-    margin-top: 12px;
-    width: 100%;
+    background: #150900; border: 2px solid #B45309;
+    border-radius: 12px; padding: 16px; margin-top: 12px; width: 100%;
+    box-shadow: 0 2px 12px rgba(180,83,9,0.18);
 }
-.feedback-rating-display {
-    text-align: center;
-    font-size: 32px;
-    line-height: 1.1;
-    letter-spacing: 0.1em;
-    margin: 2px 0 10px;
-}
-.feedback-rating-visual {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 2px;
-}
-.feedback-star-filled {
-    color: #D97706;
-}
-.feedback-star-empty {
-    color: #D1D5DB;
-}
-.feedback-star-row {
-    gap: 8px;
-    justify-content: center;
-}
+.feedback-rating-display { text-align: center; font-size: 32px; line-height: 1.1; letter-spacing: 0.1em; margin: 2px 0 10px; }
+.feedback-rating-visual { display: flex; justify-content: center; align-items: center; gap: 2px; }
+.feedback-star-filled { color: #F59E0B; }
+.feedback-star-empty  { color: #374151; }
+.feedback-star-row    { gap: 8px; justify-content: center; }
 .feedback-star-btn button {
-    background: transparent !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    color: #D97706 !important;
-    font-size: 36px !important;
-    line-height: 1 !important;
-    min-width: 0 !important;
-    padding: 0 3px !important;
-    transition: transform 0.12s ease, color 0.12s ease;
+    background: transparent !important; border: 0 !important; box-shadow: none !important;
+    color: #D97706 !important; font-size: 36px !important; line-height: 1 !important;
+    min-width: 0 !important; padding: 0 3px !important; transition: transform 0.12s ease, color 0.12s ease;
 }
-.feedback-star-btn button:hover {
-    color: #B45309 !important;
-    transform: scale(1.12);
-}
+.feedback-star-btn button:hover { color: #F59E0B !important; transform: scale(1.12); }
 .status-box {
-    background: #F8FAFC;
-    border: 1.5px solid #CBD5E1;
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-top: 12px;
-    font-size: 13px;
-    color: #334155;
+    background: #071B33; border: 1.5px solid #1A3A6E; border-radius: 10px;
+    padding: 12px 14px; margin-top: 12px; font-size: 13px; color: #7EB3FF;
 }
 .tip-box {
-    background: #EFF6FF; border-left: 4px solid #1A56DB;
-    border-radius: 0 8px 8px 0; padding: 12px 16px;
-    font-size: 13px; color: #1E40AF; line-height: 1.6;
+    background: #071B33;
+    border-left: 4px solid #1A56DB; border-radius: 0 10px 10px 0; padding: 14px 16px;
+    font-size: 13px; color: #5B9BDB; line-height: 1.6;
+    box-shadow: 0 2px 10px rgba(26,86,219,0.15);
 }
 """
 
@@ -581,8 +630,81 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
     gr.HTML("""
     <div class="fb-header">
-        <h1>FitByte AI Content Creator</h1>
-        <p>Generate on-brand blog posts, captions, LinkedIn posts and email subjects — powered by your knowledge bases</p>
+        <div class="fb-header-left">
+            <div class="fb-header-badge">&#9889; AI-Powered &nbsp;&middot;&nbsp; FitByte Pro</div>
+            <h1>FitByte AI Content Creator</h1>
+            <p>Generate on-brand blog posts, captions, LinkedIn posts and email subjects &mdash; powered by your knowledge base</p>
+        </div>
+        <div class="fb-header-right">
+          <svg class="fb-watch-svg" width="130" height="185" viewBox="0 0 140 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="fbBandGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#1D4ED8"/>
+              </linearGradient>
+              <linearGradient id="fbBodyGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#3D4A5C"/><stop offset="100%" stop-color="#1E2A3A"/>
+              </linearGradient>
+              <linearGradient id="fbScreenGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#0C1628"/><stop offset="100%" stop-color="#071020"/>
+              </linearGradient>
+              <linearGradient id="fbRingGrad" gradientUnits="userSpaceOnUse" x1="73" y1="122" x2="73" y2="158">
+                <stop offset="0%" stop-color="#60A5FA"/><stop offset="100%" stop-color="#3B82F6"/>
+              </linearGradient>
+              <filter id="fbBodyShadow">
+                <feDropShadow dx="1" dy="5" stdDeviation="6" flood-color="rgba(0,0,30,0.6)"/>
+              </filter>
+            </defs>
+            <!-- Band top -->
+            <rect x="48" y="0" width="44" height="42" rx="9" fill="url(#fbBandGrad)"/>
+            <rect x="54" y="8"  width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+            <rect x="54" y="15" width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+            <rect x="54" y="22" width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+            <rect x="54" y="29" width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+            <!-- Watch case shadow -->
+            <rect x="14" y="48" width="118" height="116" rx="25" fill="rgba(0,0,0,0.35)" transform="translate(2,5)"/>
+            <!-- Watch case -->
+            <rect x="14" y="48" width="118" height="116" rx="25" fill="url(#fbBodyGrad)"/>
+            <rect x="15" y="49" width="116" height="114" rx="24" fill="none" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/>
+            <!-- Screen -->
+            <rect x="22" y="56" width="102" height="100" rx="19" fill="url(#fbScreenGrad)"/>
+            <rect x="28" y="57" width="90" height="3" rx="1.5" fill="rgba(255,255,255,0.04)"/>
+            <!-- Brand dot + name -->
+            <circle cx="73" cy="70" r="4.5" fill="#3B82F6"/>
+            <circle cx="73" cy="70" r="2.5" fill="#93C5FD"/>
+            <text x="73" y="82" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" font-weight="700" fill="rgba(255,255,255,0.35)" letter-spacing="2.5">FITBYTE</text>
+            <!-- Time -->
+            <text x="73" y="108" text-anchor="middle" font-family="'Courier New', monospace" font-size="27" font-weight="700" fill="white" letter-spacing="-0.5">9:41</text>
+            <!-- Date -->
+            <text x="73" y="121" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="rgba(255,255,255,0.38)" letter-spacing="0.5">MON 6 MAY 2026</text>
+            <!-- Separator -->
+            <line x1="34" y1="129" x2="112" y2="129" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+            <!-- Activity ring bg -->
+            <circle cx="73" cy="143" r="17" fill="none" stroke="rgba(255,255,255,0.09)" stroke-width="4"/>
+            <!-- Activity ring 75% — circ=106.8, 75%=80.1 -->
+            <circle cx="73" cy="143" r="17" fill="none" stroke="url(#fbRingGrad)" stroke-width="4" stroke-dasharray="80 27" stroke-linecap="round" transform="rotate(-90 73 143)"/>
+            <!-- Ring label -->
+            <text x="73" y="140" text-anchor="middle" font-family="Arial, sans-serif" font-size="9.5" font-weight="700" fill="white">75%</text>
+            <text x="73" y="150" text-anchor="middle" font-family="Arial, sans-serif" font-size="6.5" fill="rgba(255,255,255,0.4)">GOAL</text>
+            <!-- Heart rate left -->
+            <text x="34" y="137" text-anchor="middle" font-size="10" fill="#F87171">&#9829;</text>
+            <text x="34" y="147" text-anchor="middle" font-family="Arial, sans-serif" font-size="9.5" font-weight="700" fill="white">72</text>
+            <text x="34" y="156" text-anchor="middle" font-family="Arial, sans-serif" font-size="6.5" fill="rgba(255,255,255,0.38)">BPM</text>
+            <!-- Steps right -->
+            <text x="112" y="137" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#34D399">&#8593;</text>
+            <text x="112" y="147" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="white">8.2k</text>
+            <text x="112" y="156" text-anchor="middle" font-family="Arial, sans-serif" font-size="6.5" fill="rgba(255,255,255,0.38)">STEPS</text>
+            <!-- Crown button -->
+            <rect x="131" y="69" width="7" height="22" rx="3.5" fill="#2D3748"/>
+            <rect x="132" y="70" width="5" height="20" rx="2.5" fill="#4A5568"/>
+            <rect x="133" y="74" width="3" height="12" rx="1.5" fill="#606C7A"/>
+            <!-- Band bottom -->
+            <rect x="48" y="162" width="44" height="38" rx="9" fill="url(#fbBandGrad)"/>
+            <rect x="54" y="166" width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+            <rect x="54" y="173" width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+            <rect x="54" y="180" width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+            <rect x="54" y="187" width="32" height="2" rx="1" fill="rgba(255,255,255,0.18)"/>
+          </svg>
+        </div>
     </div>
     """)
 
@@ -667,7 +789,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
             # ── Approve ─────────────────────────────────────────────
             with gr.Group(elem_classes=["approve-box"]):
-                gr.HTML('<div class="fb-section-label" style="color:#065F46">✓ Approve & Export</div>')
+                gr.HTML('<div class="fb-section-label" style="color:#ffffff">✓ Approve & Export</div>')
                 with gr.Row():
                     approve_btn = gr.Button(
                         "✓  Approve & Download .txt",
