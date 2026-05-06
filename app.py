@@ -1,4 +1,4 @@
-"""
+﻿"""
 app.py
 ------
 FitByte AI Content Creator — Gradio Interface
@@ -129,13 +129,25 @@ AUDIENCE INSIGHTS:
 Return ONLY the revised content. Do not add a preamble, notes, or explanation."""
 
 
+def render_star_rating_html(rating: int) -> str:
+    rating_value = max(1, min(5, int(rating or 0)))
+    filled = "".join('<span class="feedback-star-filled">★</span>' for _ in range(rating_value))
+    empty = "".join('<span class="feedback-star-empty">☆</span>' for _ in range(5 - rating_value))
+    return f'<div class="feedback-rating-visual" aria-label="Rating {rating_value} of 5">{filled}{empty}</div>'
+
+
+def set_feedback_rating(rating: int) -> tuple[int, str]:
+    rating_value = max(1, min(5, int(rating)))
+    return rating_value, render_star_rating_html(rating_value)
+
+
 def save_user_feedback(
     current_content: str,
     state: dict,
     rating: int,
     comment: str = "",
     user_name: str = "",
-) -> tuple[str, str, str]:
+) -> tuple[str, int, str, str, str]:
     """
     Save one feedback entry as an appended JSON record.
 
@@ -143,17 +155,17 @@ def save_user_feedback(
     """
     if not current_content or not current_content.strip():
         gr.Warning("Generate a post first before submitting feedback.")
-        return "", comment, user_name
+        return "", 3, render_star_rating_html(3), comment, user_name
 
     try:
         rating_value = int(rating)
     except (TypeError, ValueError):
         gr.Warning("Rating must be between 1 and 5.")
-        return "", comment, user_name
+        return "", 3, render_star_rating_html(3), comment, user_name
 
     if rating_value < 1 or rating_value > 5:
         gr.Warning("Rating must be between 1 and 5.")
-        return "", comment, user_name
+        return "", 3, render_star_rating_html(3), comment, user_name
 
     entry = {
         "feedback_id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
@@ -190,7 +202,7 @@ def save_user_feedback(
         with FEEDBACK_FILE.open("w", encoding="utf-8") as handle:
             json.dump(existing, handle, ensure_ascii=False, indent=2)
 
-    return "Feedback saved to `outputs/user_feedback.json`.", "", ""
+    return "Feedback saved to `outputs/user_feedback.json`.", 3, render_star_rating_html(3), "", ""
 
 
 # ── BUSINESS LOGIC ────────────────────────────────────────────────────
@@ -201,38 +213,35 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
 
     Returns
     -------
-    content : str          → output_box
-    state   : dict         → content_state  (JSON with full context for refine/approve)
-    wc      : str          → word_count_display
+    content : str          ? output_box
+    state   : dict         ? content_state  (JSON with full context for refine/approve)
+    wc      : str          ? word_count_display
     """
     if not topic.strip():
-        gr.Warning("⚠️  Please enter a topic before generating.")
+        gr.Warning("??  Please enter a topic before generating.")
         return "", {}, "0 words"
 
     try:
-        # Validate inputs
         topic = topic.strip()
         if len(topic) < 3:
-            gr.Warning("⚠️  Topic must be at least 3 characters.")
+            gr.Warning("??  Topic must be at least 3 characters.")
             return "", {}, "0 words"
-        
+
         if len(topic) > 200:
-            gr.Warning("⚠️  Topic must be under 200 characters.")
+            gr.Warning("??  Topic must be under 200 characters.")
             return "", {}, "0 words"
 
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
         channel = CHANNELS.get(channel_label, "blog")
         channel_config = get_channel_config(channel)
-        
-        gr.Info("🔄 Loading knowledge base...")
-        context  = get_cached_context(topic, audience)
-        
-        # Validate context loaded properly
+        gr.Info("?? Loading knowledge base...")
+        context = get_cached_context(topic, audience)
+
         if not context or not any(context.values()):
-            gr.Error("❌ Failed to load knowledge base. Please check the knowledge_base/ folder.")
+            gr.Error("? Failed to load knowledge base. Please check the knowledge_base/ folder.")
             return "", {}, "0 words"
 
-        gr.Info("💭 Building prompt context...")
+        gr.Info("?? Building prompt context...")
         ctx = PromptContext(
             topic=topic,
             channel=channel,
@@ -253,7 +262,7 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
         if custom_instructions.strip():
             user_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_instructions.strip()}"
 
-        gr.Info(f"⏳ Generating {channel_config['label']}... (this may take 10-20 seconds)")
+        gr.Info(f"? Generating {channel_config['label']}... (this may take 10-20 seconds)")
         response = llm.generate(
             user_prompt=user_prompt,
             system_prompt=system_prompt,
@@ -263,40 +272,41 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
         )
 
         if not response or not response.content:
-            gr.Error("❌ LLM returned empty response. Please try again.")
+            gr.Error("? LLM returned empty response. Please try again.")
             return "", {}, "0 words"
 
         content = response.content.strip()
         if not content:
-            gr.Error("❌ Generated content is empty. Please try again.")
+            gr.Error("? Generated content is empty. Please try again.")
             return "", {}, "0 words"
 
         state = {
-            "topic":         topic,
-            "channel":       channel,
+            "topic": topic,
+            "channel": channel,
             "channel_label": channel_label,
-            "audience":      audience,
-            "output_label":  channel_config["label"],
+            "audience": audience,
+            "output_label": channel_config["label"],
             "brand_identity": context["brand_identity"][:600],
             "writing_rules": context["writing_rules"][:600],
             "audience_insights": context["audience_insights"][:600],
         }
 
-        gr.Info(f"✅ Content generated! ({len(content.split())} words)")
+        status_msg = f"? Content generated successfully. ({len(content.split())} words)"
+        gr.Info(status_msg)
         return content, state, word_count(content)
 
     except ValueError as e:
-        error_msg = f"❌ Validation error: {str(e)}"
+        error_msg = f"? Validation error: {str(e)}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
     except RuntimeError as e:
-        error_msg = f"❌ {str(e)[:100]}"
+        error_msg = f"? {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
     except Exception as e:
-        error_msg = f"❌ Unexpected error: {str(e)[:100]}"
+        error_msg = f"? Unexpected error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
@@ -506,25 +516,54 @@ FITBYTE_CSS = """
     border-radius: 10px;
     padding: 16px;
     margin-top: 12px;
-    max-width: 420px;
-    margin-left: auto;
+    width: 100%;
 }
-#feedback-panel {
-    position: fixed;
-    right: 24px;
-    bottom: 24px;
-    width: 320px;
-    z-index: 50;
+.feedback-rating-display {
+    text-align: center;
+    font-size: 32px;
+    line-height: 1.1;
+    letter-spacing: 0.1em;
+    margin: 2px 0 10px;
 }
-@media (max-width: 900px) {
-    #feedback-panel {
-        position: static;
-        width: 100%;
-        right: auto;
-        bottom: auto;
-        z-index: auto;
-        margin-top: 16px;
-    }
+.feedback-rating-visual {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+}
+.feedback-star-filled {
+    color: #D97706;
+}
+.feedback-star-empty {
+    color: #D1D5DB;
+}
+.feedback-star-row {
+    gap: 8px;
+    justify-content: center;
+}
+.feedback-star-btn button {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #D97706 !important;
+    font-size: 36px !important;
+    line-height: 1 !important;
+    min-width: 0 !important;
+    padding: 0 3px !important;
+    transition: transform 0.12s ease, color 0.12s ease;
+}
+.feedback-star-btn button:hover {
+    color: #B45309 !important;
+    transform: scale(1.12);
+}
+.status-box {
+    background: #F8FAFC;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: #334155;
 }
 .tip-box {
     background: #EFF6FF; border-left: 4px solid #1A56DB;
@@ -577,13 +616,6 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
                 lines=2,
             )
 
-            generate_btn = gr.Button(
-                "✦  Generate Content",
-                variant="primary",
-                elem_classes=["btn-generate"],
-                size="lg",
-            )
-
             gr.HTML("""
             <div class="tip-box" style="margin-top:12px">
                 <strong>Tips for better outputs:</strong><br>
@@ -592,6 +624,13 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
                 • Generation takes ~10–15 s
             </div>
             """)
+
+            generate_btn = gr.Button(
+                "✦  Generate Content",
+                variant="primary",
+                elem_classes=["btn-generate"],
+                size="lg",
+            )
 
         # ── RIGHT: Output + Refine + Approve ─────────────────────────
         with gr.Column(scale=3, min_width=400):
@@ -647,13 +686,14 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
     with gr.Group(elem_id="feedback-panel", elem_classes=["feedback-box"]):
         gr.HTML('<div class="fb-section-label" style="color:#9A3412">User Feedback</div>')
         feedback_status = gr.Markdown("")
-        feedback_rating = gr.Slider(
-            minimum=1,
-            maximum=5,
-            value=3,
-            step=1,
-            label="Rating",
-        )
+        feedback_rating_state = gr.State(3)
+        feedback_rating_display = gr.HTML(render_star_rating_html(3), elem_classes=["feedback-rating-display"])
+        with gr.Row(elem_classes=["feedback-star-row"]):
+            star_1 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+            star_2 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+            star_3 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+            star_4 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+            star_5 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
         feedback_comment = gr.Textbox(
             label="Comment (optional)",
             placeholder="What should be improved?",
@@ -669,6 +709,12 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
             elem_classes=["btn-generate"],
             size="sm",
         )
+
+    star_1.click(fn=lambda: set_feedback_rating(1), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
+    star_2.click(fn=lambda: set_feedback_rating(2), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
+    star_3.click(fn=lambda: set_feedback_rating(3), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
+    star_4.click(fn=lambda: set_feedback_rating(4), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
+    star_5.click(fn=lambda: set_feedback_rating(5), inputs=[], outputs=[feedback_rating_state, feedback_rating_display], queue=False)
 
     generate_btn.click(
         fn=generate_post,
@@ -693,8 +739,8 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
     feedback_submit_btn.click(
         fn=save_user_feedback,
-        inputs=[output_box, content_state, feedback_rating, feedback_comment, feedback_name],
-        outputs=[feedback_status, feedback_comment, feedback_name],
+        inputs=[output_box, content_state, feedback_rating_state, feedback_comment, feedback_name],
+        outputs=[feedback_status, feedback_rating_state, feedback_rating_display, feedback_comment, feedback_name],
         queue=False,
     )
 
@@ -722,6 +768,7 @@ if __name__ == "__main__":
         print("\n\nServer stopped by user.")
     except Exception as e:
         print(f"\n✗ Unexpected error: {e}")
+
 
 
 
