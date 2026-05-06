@@ -253,8 +253,17 @@ def render_star_rating_html(rating: int) -> str:
 
 def set_feedback_rating(rating: int) -> tuple:
     v = max(1, min(5, int(rating)))
-    labels = ["★" if i <= v else "☆" for i in range(1, 6)]
-    return (v, *labels)
+    html = _star_html(v)
+    return (v, html)
+
+
+def _star_html(v: int) -> str:
+    stars = "".join(
+        '<span style="color:#F59E0B;font-size:36px;line-height:1;">&#9733;</span>' if i <= v
+        else '<span style="color:#4B5563;font-size:36px;line-height:1;">&#9734;</span>'
+        for i in range(1, 6)
+    )
+    return f'<div style="display:flex;justify-content:center;gap:6px;margin:6px 0;">{stars}</div>'
 
 
 def save_user_feedback(
@@ -269,7 +278,7 @@ def save_user_feedback(
 
     Returns a status message plus cleared optional fields.
     """
-    _reset = (3, "★", "★", "★", "☆", "☆")
+    _reset = (3, _star_html(3))
 
     if not current_content or not current_content.strip():
         gr.Warning("Generate a post first before submitting feedback.")
@@ -320,7 +329,7 @@ def save_user_feedback(
         with FEEDBACK_FILE.open("w", encoding="utf-8") as handle:
             json.dump(existing, handle, ensure_ascii=False, indent=2)
 
-    return "Feedback saved to `outputs/user_feedback.json`.", 3, "★", "★", "★", "☆", "☆", "", ""
+    return "Feedback saved to `outputs/user_feedback.json`.", 3, _star_html(3), "", ""
 
 
 # ── BUSINESS LOGIC ────────────────────────────────────────────────────
@@ -695,15 +704,14 @@ body, .main { background: #050D1A !important; }
 .feedback-star-filled { color: #B45309; }
 .feedback-star-empty  { color: #374151; }
 .feedback-star-row    { gap: 8px; justify-content: center; }
-#feedback-panel .feedback-star-btn button,
-#feedback-panel .feedback-star-btn button span,
-#feedback-panel .feedback-star-btn button * {
-    background: transparent !important; border: 0 !important; box-shadow: none !important;
-    color: #B45309 !important; font-size: 36px !important; line-height: 1 !important;
-    min-width: 0 !important; padding: 0 3px !important; transition: transform 0.12s ease, color 0.12s ease;
+#feedback-panel .feedback-star-btn button {
+    background: rgba(255,255,255,0.07) !important; border: 1px solid rgba(255,255,255,0.15) !important;
+    box-shadow: none !important; color: #9CA3AF !important;
+    font-size: 12px !important; line-height: 1 !important;
+    min-width: 32px !important; padding: 4px 6px !important;
+    border-radius: 6px !important; transition: background 0.12s ease;
 }
-#feedback-panel .feedback-star-btn button:hover,
-#feedback-panel .feedback-star-btn button:hover span { color: #D97706 !important; transform: scale(1.12); }
+#feedback-panel .feedback-star-btn button:hover { background: rgba(245,158,11,0.2) !important; color: #F59E0B !important; }
 .status-box {
     background: #071B33; border: 1.5px solid #1A3A6E; border-radius: 10px;
     padding: 12px 14px; margin-top: 12px; font-size: 13px; color: #7EB3FF;
@@ -854,28 +862,13 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
                 gr.HTML('<div class="fb-section-label" style="color:#9A3412">User Feedback</div>')
                 feedback_status = gr.Markdown("")
                 feedback_rating_state = gr.State(3)
+                star_display = gr.HTML(_star_html(3))
                 with gr.Row(elem_classes=["feedback-star-row"]):
-                    star_1 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_2 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_3 = gr.Button("★", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_4 = gr.Button("☆", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                    star_5 = gr.Button("☆", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
-                gr.HTML("""<script>
-(function() {
-  function paintStars() {
-    document.querySelectorAll('.feedback-star-btn button, .feedback-star-btn button span').forEach(function(el) {
-      el.style.setProperty('color', '#B45309', 'important');
-      el.style.setProperty('background', 'transparent', 'important');
-      el.style.setProperty('border', 'none', 'important');
-      el.style.setProperty('box-shadow', 'none', 'important');
-      el.style.setProperty('font-size', '32px', 'important');
-    });
-  }
-  setTimeout(paintStars, 300);
-  var obs = new MutationObserver(paintStars);
-  obs.observe(document.body, { childList: true, subtree: true });
-})();
-</script>""")
+                    star_1 = gr.Button("1", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_2 = gr.Button("2", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_3 = gr.Button("3", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_4 = gr.Button("4", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
+                    star_5 = gr.Button("5", elem_classes=["feedback-star-btn"], variant="secondary", min_width=0)
                 feedback_comment = gr.Textbox(
                     label="Comment (optional)",
                     placeholder="What should be improved?",
@@ -943,7 +936,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
     # ── EVENT WIRING ─────────────────────────────────────────────────
 
-    _star_outputs = [feedback_rating_state, star_1, star_2, star_3, star_4, star_5]
+    _star_outputs = [feedback_rating_state, star_display]
     star_1.click(fn=lambda: set_feedback_rating(1), inputs=[], outputs=_star_outputs, queue=False)
     star_2.click(fn=lambda: set_feedback_rating(2), inputs=[], outputs=_star_outputs, queue=False)
     star_3.click(fn=lambda: set_feedback_rating(3), inputs=[], outputs=_star_outputs, queue=False)
@@ -974,7 +967,7 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
     feedback_submit_btn.click(
         fn=save_user_feedback,
         inputs=[output_box, content_state, feedback_rating_state, feedback_comment, feedback_name],
-        outputs=[feedback_status, feedback_rating_state, star_1, star_2, star_3, star_4, star_5, feedback_comment, feedback_name],
+        outputs=[feedback_status, feedback_rating_state, star_display, feedback_comment, feedback_name],
         queue=False,
     )
 
