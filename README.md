@@ -1,4 +1,4 @@
-# FitByte AI Content Creator
+﻿# FitByte AI Content Creator
 
 An AI-powered content generation system for FitByte, a precision fitness watch brand.
 Generates on-brand blog posts, Instagram captions, LinkedIn posts and email subject lines
@@ -10,27 +10,27 @@ by injecting brand guidelines, product specs and market research into advanced L
 
 ```
 fitbyte-ai-content-creator/
-├── main.py                              # CLI entry point
-├── fitbyte_ai_content_creator.ipynb     # Main project notebook
-├── src/
-│   ├── document_processor.py            # Markdown parsing & text extraction
-│   ├── knowledge_base.py                # KB management (primary + secondary)
-│   ├── prompt_templates.py              # Advanced prompt engineering templates
-│   ├── content_pipeline.py              # Full pipeline orchestration
-│   └── llm_integration.py              # OpenAI & Anthropic API wrapper
-├── knowledge_base/
-│   ├── primary/                         # Company-specific documents
-│   │   ├── fitbyte_brand_guidelines.md
-│   │   ├── fitbyte_product_specs.md
-│   │   └── past_content/
-│   │       └── fitbyte_content_examples.md
-│   └── secondary/                       # Industry research
-│       ├── market_trends.md
-│       └── competitor_analysis.md
-├── outputs/                             # Generated content (gitignored)
-├── requirements.txt
-├── .env.example
-└── .gitignore
+â”œâ”€â”€ app.py                              # CLI entry point
+â”œâ”€â”€ fitbyte_ai_content_creator.ipynb     # Main project notebook
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ document_processor.py            # Markdown parsing & text extraction
+â”‚   â”œâ”€â”€ knowledge_base.py                # KB management (primary + secondary)
+â”‚   â”œâ”€â”€ prompt_templates.py              # Advanced prompt engineering templates
+â”‚   â”œâ”€â”€ content_pipeline.py              # Full pipeline orchestration
+â”‚   â””â”€â”€ llm_integration.py              # OpenAI & Anthropic API wrapper
+â”œâ”€â”€ knowledge_base/
+â”‚   â”œâ”€â”€ primary/                         # Company-specific documents
+â”‚   â”‚   â”œâ”€â”€ fitbyte_brand_guidelines.md
+â”‚   â”‚   â”œâ”€â”€ fitbyte_product_specs.md
+â”‚   â”‚   â””â”€â”€ past_content/
+â”‚   â”‚       â””â”€â”€ fitbyte_content_examples.md
+â”‚   â””â”€â”€ secondary/                       # Industry research
+â”‚       â”œâ”€â”€ market_trends.md
+â”‚       â””â”€â”€ competitor_analysis.md
+â”œâ”€â”€ outputs/                             # Generated content (gitignored)
+â”œâ”€â”€ requirements.txt
+â”œâ”€â”€ .env.example
+â””â”€â”€ .gitignore
 ```
 
 ---
@@ -75,7 +75,7 @@ jupyter notebook fitbyte_ai_content_creator.ipynb
 Or use the CLI:
 
 ```bash
-python main.py --topic "why rest days matter" --channel blog
+python app.py --topic "why rest days matter" --channel blog
 ```
 
 ---
@@ -83,11 +83,11 @@ python main.py --topic "why rest days matter" --channel blog
 ## Content Pipeline
 
 ```
-[1] DOCUMENT  — Load markdown from both knowledge bases
-[2] MONITOR   — LLM analyzes topic for brand fit + market relevance
-[3] BRIEF     — Chain-of-thought prompt generates a structured content brief
-[4] PUBLISH   — Few-shot + contextual placement generates final content
-[5] ITERATE   — Human review: approve / edit / regenerate
+[1] DOCUMENT  â€” Load markdown from both knowledge bases
+[2] MONITOR   â€” LLM analyzes topic for brand fit + market relevance
+[3] BRIEF     â€” Chain-of-thought prompt generates a structured content brief
+[4] PUBLISH   â€” Few-shot + contextual placement generates final content
+[5] ITERATE   â€” Human review: approve / edit / regenerate
 ```
 
 ---
@@ -96,22 +96,22 @@ python main.py --topic "why rest days matter" --channel blog
 
 ```bash
 # Interactive blog post
-python main.py --topic "why your resting heart rate matters" --channel blog
+python app.py --topic "why your resting heart rate matters" --channel blog
 
 # Instagram caption (skip review)
-python main.py --topic "winter training" --channel instagram --auto
+python app.py --topic "winter training" --channel instagram --auto
 
 # LinkedIn post
-python main.py --topic "stress and recovery" --channel linkedin --audience health_professional
+python app.py --topic "stress and recovery" --channel linkedin --audience health_professional
 
 # Uniqueness comparison vs generic ChatGPT
-python main.py --topic "sleep quality" --compare
+python app.py --topic "sleep quality" --compare
 
 # Full batch run
-python main.py --batch
+python app.py --batch
 
 # Use Anthropic instead of OpenAI
-python main.py --topic "overtraining" --provider anthropic
+python app.py --topic "overtraining" --provider anthropic
 ```
 
 ---
@@ -153,13 +153,13 @@ Recommended extensions:
 ## Knowledge Base
 
 ### Primary (Company-Specific)
-- `fitbyte_brand_guidelines.md` — Voice, writing rules, vocabulary, tone by channel
-- `fitbyte_product_specs.md` — Full hardware and feature specifications
-- `past_content/fitbyte_content_examples.md` — 10 real FitByte blog posts for style reference
+- `fitbyte_brand_guidelines.md` â€” Voice, writing rules, vocabulary, tone by channel
+- `fitbyte_product_specs.md` â€” Full hardware and feature specifications
+- `past_content/fitbyte_content_examples.md` â€” 10 real FitByte blog posts for style reference
 
 ### Secondary (Industry Research)
-- `market_trends.md` — Consumer trends, pain points, platform notes (2024-2025)
-- `competitor_analysis.md` — Positioning vs Garmin, Apple Watch, Fitbit, Whoop
+- `market_trends.md` â€” Consumer trends, pain points, platform notes (2024-2025)
+- `competitor_analysis.md` â€” Positioning vs Garmin, Apple Watch, Fitbit, Whoop
 
 To update knowledge bases: edit the `.md` files in `knowledge_base/`. No reindexing required.
 
@@ -177,4 +177,5 @@ To update knowledge bases: edit the `.md` files in `knowledge_base/`. No reindex
 
 ## Team
 
-Built for Ironhack Data Analytics Bootcamp — Module 2 Project
+Built for Ironhack Data Analytics Bootcamp â€” Module 2 Project
+

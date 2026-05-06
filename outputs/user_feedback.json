@@ -13,5 +13,20 @@
     "channel_label": "Blog Post",
     "audience": "fitness_enthusiast",
     "output_label": "blog post"
+  },
+  {
+    "feedback_id": "20260506104855159677",
+    "submitted_at": "2026-05-06T10:48:55",
+    "rating": 3,
+    "comment": "happy",
+    "user_name": "Maxx",
+    "output_text": "**Unlocking Your Potential with FitByte: The Right Data Matters**\n\nIn a world overflowing with fitness information, it can be overwhelming to determine what truly matters. FitByte provides clarity in the chaos of fitness tracking, offering data that empowers your journey.\n\nWhether you are a competitive athlete or someone trying to stay active, the FitByte Fitness Watch tracks essential metrics like heart rate and sleep stages in an easy to understand format. Imagine waking up to a clear Recovery Score that guides your day.\n\nWith FitByte, you have the right data to support your fitness journey, transforming your approach to health.",
+    "output_excerpt": "**Unlocking Your Potential with FitByte: The Right Data Matters**\n\nIn a world overflowing with fitness information, it can be overwhelming to determine what truly matters. FitByte provides clarity in the chaos of fitness tracking, offering data that empowers your journey.\n\nWhether you are a competitive athlete or someone trying to stay active, the FitByte Fitness Watch tracks essential metrics like heart rate and sleep stages in an easy to understand format. Imagine waking up to a clear Recovery",
+    "output_word_count": 100,
+    "topic": "test",
+    "channel": "blog",
+    "channel_label": "Blog Post",
+    "audience": "fitness_enthusiast",
+    "output_label": "blog post"
   }
 ]

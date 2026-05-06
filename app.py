@@ -14,6 +14,7 @@ Run with:
     python app.py
 """
 
+import argparse
 import sys
 import os
 import json
@@ -29,6 +30,7 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 import gradio as gr
+from content_pipeline import ContentPipeline
 from knowledge_base import KnowledgeBase
 from llm_integration import get_llm_client
 from prompt_templates import (
@@ -88,6 +90,83 @@ CHANNEL_CONFIG = {
         "temperature": 0.65,
     },
 }
+
+CLI_CHANNELS = list(CHANNEL_CONFIG.keys())
+CLI_AUDIENCES = list(AUDIENCES.values())
+
+BATCH_REQUESTS = [
+    {
+        "topic": "why rest days are part of training",
+        "channel": "blog",
+        "audience": "fitness_enthusiast",
+    },
+    {
+        "topic": "the difference between sleep length and sleep quality",
+        "channel": "blog",
+        "audience": "health_professional",
+    },
+    {
+        "topic": "how dual-frequency GPS changes route accuracy",
+        "channel": "blog",
+        "audience": "performance_athlete",
+    },
+    {
+        "topic": "your body knows you're stressed before your brain does",
+        "channel": "instagram",
+        "audience": "fitness_enthusiast",
+    },
+    {
+        "topic": "training load and injury prevention",
+        "channel": "linkedin",
+        "audience": "health_professional",
+    },
+    {
+        "topic": "improve recovery with smarter insights",
+        "channel": "email_subject",
+        "audience": "general",
+    },
+]
+
+
+def parse_cli_args():
+    parser = argparse.ArgumentParser(
+        description="FitByte AI Content Creator",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+
+  python app.py --topic "why your resting heart rate matters" --channel blog
+  python app.py --topic "winter training" --channel instagram --auto
+  python app.py --topic "sleep quality" --compare
+  python app.py --batch
+""",
+    )
+    parser.add_argument("--topic", type=str, help="Content topic or angle")
+    parser.add_argument(
+        "--channel",
+        type=str,
+        default="blog",
+        choices=CLI_CHANNELS,
+        help="Target channel (default: blog)",
+    )
+    parser.add_argument(
+        "--audience",
+        type=str,
+        default="fitness_enthusiast",
+        choices=CLI_AUDIENCES,
+        help="Target audience (default: fitness_enthusiast)",
+    )
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default="auto",
+        choices=["auto", "openai", "anthropic"],
+        help="LLM provider (default: auto)",
+    )
+    parser.add_argument("--auto", action="store_true", help="Skip human review, auto-save")
+    parser.add_argument("--compare", action="store_true", help="Run uniqueness comparison")
+    parser.add_argument("--batch", action="store_true", help="Run pre-defined batch of posts")
+    parser.add_argument("--quiet", action="store_true", help="Suppress verbose logging")
+    return parser.parse_args()
 
 
 # ── HELPERS ───────────────────────────────────────────────────────────
@@ -462,7 +541,7 @@ def find_free_port(start_port=7860, max_attempts=25):
         try:
             start_port = int(env_port)
         except ValueError:
-            print(f"  ⚠ Invalid GRADIO_SERVER_PORT: {env_port}, using default {start_port}")
+            print(f"WARNING: Invalid GRADIO_SERVER_PORT: {env_port}, using default {start_port}")
     
     for port in range(start_port, start_port + max_attempts):
         try:
@@ -892,13 +971,84 @@ with gr.Blocks(title="FitByte Content Creator", css=FITBYTE_CSS) as demo:
 
 demo.queue()
 
-if __name__ == "__main__":
+
+def run_cli(args):
+    try:
+        pipeline = ContentPipeline(provider=args.provider, verbose=not args.quiet)
+    except ValueError as e:
+        print(f"ERROR: Configuration error: {e}")
+        return
+    except Exception as e:
+        print(f"ERROR: Failed to initialize pipeline: {str(e)[:150]}")
+        return
+
+    try:
+        if args.batch:
+            if not BATCH_REQUESTS:
+                print("ERROR: No batch requests defined.")
+                return
+            print(f"Running batch: {len(BATCH_REQUESTS)} content pieces\n")
+            results = pipeline.run_batch(BATCH_REQUESTS)
+            completed = len([r for r in results if not r.get("error")])
+            failed = len(results) - completed
+            print(f"\nDONE: Batch complete: {completed} succeeded", end="")
+            if failed > 0:
+                print(f", {failed} failed")
+            else:
+                print()
+            return
+
+        if not args.topic:
+            print("Enter a content topic (or press Ctrl+C to quit):")
+            try:
+                args.topic = input("> ").strip()
+            except KeyboardInterrupt:
+                print("\nExiting.")
+                return
+            except EOFError:
+                print("\nNo input received. Exiting.")
+                return
+
+            if not args.topic:
+                print("ERROR: No topic provided. Exiting.")
+                return
+
+        if args.compare:
+            try:
+                pipeline.compare_uniqueness(topic=args.topic, channel=args.channel)
+            except Exception as e:
+                print(f"ERROR: Comparison failed: {str(e)[:150]}")
+            return
+
+        result = pipeline.run(
+            topic=args.topic,
+            channel=args.channel,
+            audience=args.audience,
+            auto_approve=args.auto,
+        )
+
+        if result.get("error"):
+            print(f"\nERROR: Generation failed: {result['error']}")
+            return
+
+        if result.get("content") and result["content"] not in ("", "__REGENERATE__"):
+            print("\nDONE: Content saved to outputs/")
+        else:
+            print("\nWARNING: No content generated.")
+
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user.")
+    except Exception as e:
+        print(f"\nERROR: Unexpected error: {str(e)[:150]}")
+
+
+def run_ui():
     try:
         server_port = find_free_port()
-        print("\n  ✅ FitByte AI Content Creator")
-        print("  ──────────────────────────")
-        print(f"  LLM: {llm.__class__.__name__} / {llm.model}")
-        print(f"  Open: http://localhost:{server_port}\n")
+        print("\n=== FitByte AI Content Creator ===")
+        print("==================================")
+        print(f"LLM: {llm.__class__.__name__} / {llm.model}")
+        print(f"Open: http://localhost:{server_port}\n")
         demo.launch(
             server_name="0.0.0.0",
             server_port=server_port,
@@ -907,15 +1057,17 @@ if __name__ == "__main__":
             show_error=True,
         )
     except OSError as e:
-        print(f"\n✗ Failed to start server: {e}")
-        print("  Try: export GRADIO_SERVER_PORT=7861 (or another free port)")
+        print(f"\nERROR: Failed to start server: {e}")
+        print("Try: export GRADIO_SERVER_PORT=7861 (or another free port)")
     except KeyboardInterrupt:
         print("\n\nServer stopped by user.")
     except Exception as e:
-        print(f"\n✗ Unexpected error: {e}")
+        print(f"\nERROR: Unexpected error: {e}")
 
 
-
-
-
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        run_cli(parse_cli_args())
+    else:
+        run_ui()
 

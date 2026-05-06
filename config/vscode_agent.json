@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "FitByte AI Content Creator",
   "description": "VSCode agent configuration for the FitByte content generation project",
   "version": "1.0.0",
@@ -15,15 +15,15 @@
 
   "tasks": {
     "run_pipeline": {
-      "command": "python main.py --topic \"${input:topic}\" --channel ${input:channel}",
+      "command": "python app.py --topic \"${input:topic}\" --channel ${input:channel}",
       "description": "Run the content pipeline interactively"
     },
     "run_batch": {
-      "command": "python main.py --batch",
+      "command": "python app.py --batch",
       "description": "Run the pre-defined batch of content pieces"
     },
     "run_comparison": {
-      "command": "python main.py --topic \"${input:topic}\" --compare",
+      "command": "python app.py --topic \"${input:topic}\" --compare",
       "description": "Run uniqueness comparison for a topic"
     },
     "test_kb": {
@@ -64,3 +64,4 @@
 
   "notes": "Requires .env file with OPENAI_API_KEY and/or ANTHROPIC_API_KEY. See .env.example."
 }
+

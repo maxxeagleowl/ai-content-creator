@@ -1,4 +1,4 @@
-# Agent Instructions - AI Content Creator
+﻿# Agent Instructions - AI Content Creator
 
 ## Objective
 
@@ -12,7 +12,7 @@ Do not use a vector database.
 
 Focus on a simple working flow:
 
-markdown files → knowledge base context → prompt template → LLM call → generated content
+markdown files â†’ knowledge base context â†’ prompt template â†’ LLM call â†’ generated content
 
 ---
 
@@ -21,9 +21,9 @@ Build a Python-based AI Content Creator that generates **unique, brand-aligned c
 - Primary Knowledge Base (company-specific)
 - Secondary Knowledge Base (industry context)
 
-No full RAG. No vector DB. Focus on **markdown → prompt → LLM → output**.
+No full RAG. No vector DB. Focus on **markdown â†’ prompt â†’ LLM â†’ output**.
 
-Content pipeline: Implement the workflow: document → monitor → brief → publish → iterate
+Content pipeline: Implement the workflow: document â†’ monitor â†’ brief â†’ publish â†’ iterate
 
 Document : Ingest and process documents from both knowledge bases (Primary: company-specific, Secondary: industry research)
 Monitor : Track and analyze content needs, market trends, and brand alignment
@@ -40,7 +40,7 @@ Iterate : Refine and improve content based on feedback and updated knowledge
 - Two knowledge bases:
   - Primary: brand guidelines, product specs, past content
   - Secondary: market trends, competitors, industry insights
-- Prompt templates (min. 2–3)
+- Prompt templates (min. 2â€“3)
 - Content generation pipeline
 - Demonstrate **uniqueness vs generic ChatGPT**
 
@@ -63,28 +63,28 @@ Optional later:
 ## Required Project Structure
 
 ai-content-creator/
-├── src/
-│   ├── document_processor.py
-│   ├── knowledge_base.py
-│   ├── prompt_templates.py
-│   ├── content_pipeline.py
-│   ├── llm_integration.py
-│   └── main.py
-├── knowledge_base/
-│   ├── primary/
-│   │   ├── brand_guidelines.md
-│   │   ├── product_specs.md
-│   │   └── past_content.md
-│   └── secondary/
-│       ├── market_trends.md
-│       └── competitor_analysis.md
-├── outputs/
-├── config/
-│   └── vscode_agent.json
-├── requirements.txt
-├── README.md
-├── .env.example
-└── .gitignore
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ document_processor.py
+â”‚   â”œâ”€â”€ knowledge_base.py
+â”‚   â”œâ”€â”€ prompt_templates.py
+â”‚   â”œâ”€â”€ content_pipeline.py
+â”‚   â”œâ”€â”€ llm_integration.py
+â”‚   â””â”€â”€ app.py
+â”œâ”€â”€ knowledge_base/
+â”‚   â”œâ”€â”€ primary/
+â”‚   â”‚   â”œâ”€â”€ brand_guidelines.md
+â”‚   â”‚   â”œâ”€â”€ product_specs.md
+â”‚   â”‚   â””â”€â”€ past_content.md
+â”‚   â””â”€â”€ secondary/
+â”‚       â”œâ”€â”€ market_trends.md
+â”‚       â””â”€â”€ competitor_analysis.md
+â”œâ”€â”€ outputs/
+â”œâ”€â”€ config/
+â”‚   â””â”€â”€ vscode_agent.json
+â”œâ”€â”€ requirements.txt
+â”œâ”€â”€ README.md
+â”œâ”€â”€ .env.example
+â””â”€â”€ .gitignore
 
 ---
 
@@ -211,7 +211,7 @@ outputs/refined_content.md
 
 ### 7. Main Entry
 
-File: src/main.py
+File: app.py
 
 Simple CLI:
 
@@ -354,7 +354,7 @@ OPENAI_API_KEY=your_api_key_here
 
 Project is complete when:
 
-- main.py runs
+- app.py runs
 - markdown is loaded
 - context is built
 - LLM generates content
@@ -391,3 +391,5 @@ markdown context + prompt engineering
 2. Uniqueness
 3. Clean structure
 4. Documentation
+
+end

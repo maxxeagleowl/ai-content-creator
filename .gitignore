@@ -12,3 +12,5 @@ src/__pycache__/
 generate_presentation.py
 ~$FitByte_AI_Content_Creator_Presentation.pptx
 
+agent.md
+.gitignore
