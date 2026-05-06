@@ -336,27 +336,27 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
     wc      : str          ? word_count_display
     """
     if not topic.strip():
-        return _reject_generation("??  Please enter a topic before generating.")
+        return _reject_generation("ERROR: Please enter a topic before generating.")
+
 
     try:
         topic = topic.strip()
         if len(topic) < 3:
-            return _reject_generation("??  Topic must be at least 3 characters.")
+            return _reject_generation("ERROR: Topic must be at least 3 characters.")
 
         if len(topic) > 200:
-            return _reject_generation("??  Topic must be under 200 characters.")
-
+            return _reject_generation("ERROR: Topic must be under 200 characters.")
         audience = AUDIENCES.get(audience_label, "fitness_enthusiast")
         channel = CHANNELS.get(channel_label, "blog")
         channel_config = get_channel_config(channel)
-        gr.Info("?? Loading knowledge base...")
+        gr.Info("INFO: Loading knowledge base...")
         context = get_cached_context(topic, audience)
 
         if not context or not any(context.values()):
-            gr.Error("? Failed to load knowledge base. Please check the knowledge_base/ folder.")
+            gr.Error("ERROR: Failed to load knowledge base. Please check the knowledge_base/ folder.")
             return "", {}, "0 words"
 
-        gr.Info("?? Building prompt context...")
+        gr.Info("INFO: Building prompt context...")
         ctx = build_generation_context(topic, channel, audience, context, custom_instructions or "")
 
         system_prompt, user_prompt = get_prompt_for_channel(ctx, brief="")
@@ -364,7 +364,7 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
         if custom_instructions.strip():
             user_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{custom_instructions.strip()}"
 
-        gr.Info(f"? Generating {channel_config['label']}... (this may take 10-20 seconds)")
+        gr.Info(f"INFO: Generating {channel_config['label']}... (this may take 10-20 seconds)")
         response = llm.generate(
             user_prompt=user_prompt,
             system_prompt=system_prompt,
@@ -374,11 +374,11 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
         )
 
         if not response or not response.content:
-            return _reject_generation("? LLM returned empty response. Please try again.")
+            return _reject_generation("ERROR: LLM returned empty response. Please try again.")
 
         content = response.content.strip()
         if not content:
-            return _reject_generation("? Generated content is empty. Please try again.")
+            return _reject_generation("ERROR: Generated content is empty. Please try again.")
 
         state = {
             "topic": topic,
@@ -391,22 +391,22 @@ def generate_post(topic, audience_label, channel_label, custom_instructions):
             "audience_insights": context["audience_insights"][:600],
         }
 
-        status_msg = f"? Content generated successfully. ({len(content.split())} words)"
+        status_msg = f"SUCCESS: Content generated successfully. ({len(content.split())} words)"
         gr.Info(status_msg)
         return content, state, word_count(content)
 
     except ValueError as e:
-        error_msg = f"? Validation error: {str(e)}"
+        error_msg = f"ERROR: Validation error: {str(e)}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
     except RuntimeError as e:
-        error_msg = f"? {str(e)[:100]}"
+        error_msg = f"ERROR: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
     except Exception as e:
-        error_msg = f"? Unexpected error: {str(e)[:100]}"
+        error_msg = f"ERROR: Unexpected error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in generate_post: {e}")
         return "", {}, "0 words"
@@ -420,26 +420,26 @@ def refine_post(current_content, refinement_instruction, state):
     Returns : new_content → output_box  |  updated_state → content_state
     """
     if not current_content.strip():
-        gr.Warning("⚠️  Generate a post first before refining.")
+        gr.Warning("WARNING: Generate a post first before refining.")
         return current_content, state
 
     if not refinement_instruction.strip():
-        gr.Warning("⚠️  Enter a refinement instruction (e.g., 'make it shorter' or 'add more emojis').")
+        gr.Warning("WARNING: Enter a refinement instruction (e.g., 'make it shorter' or 'add more emojis').")
         return current_content, state
 
     if not state or not isinstance(state, dict):
-        gr.Warning("⚠️  No generation context found — please generate a post first.")
+        gr.Warning("WARNING: No generation context found - please generate a post first.")
         return current_content, state
 
     try:
         # Validate instruction length
         if len(refinement_instruction) > 300:
-            gr.Warning("⚠️  Refinement instruction is too long (max 300 characters).")
+            gr.Warning("WARNING: Refinement instruction is too long (max 300 characters).")
             return current_content, state
 
         refine_prompt = build_refine_prompt(current_content, refinement_instruction, state)
         
-        gr.Info("🔄 Applying refinement...")
+        gr.Info("INFO: Applying refinement...")
         response = llm.generate(
             user_prompt=refine_prompt,
             system_prompt=build_writer_system_prompt(build_refine_context(state)),
@@ -449,7 +449,7 @@ def refine_post(current_content, refinement_instruction, state):
         )
 
         if not response or not response.content.strip():
-            gr.Error("❌ Failed to refine post. Please try again or regenerate from scratch.")
+            gr.Error("ERROR: Failed to refine post. Please try again or regenerate from scratch.")
             return current_content, state
 
         new_content   = response.content.strip()
@@ -457,22 +457,22 @@ def refine_post(current_content, refinement_instruction, state):
 
         old_wc = len(current_content.split())
         new_wc = len(new_content.split())
-        gr.Info(f"✅ Refinement applied ({old_wc} → {new_wc} words)")
+        gr.Info(f"SUCCESS: Refinement applied ({old_wc} -> {new_wc} words)")
 
         return new_content, updated_state, word_count(new_content)
 
     except ValueError as e:
-        error_msg = f"❌ Validation error: {str(e)}"
+        error_msg = f"ERROR: Validation error: {str(e)}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
         return current_content, state, word_count(current_content)
     except RuntimeError as e:
-        error_msg = f"❌ Refinement failed: {str(e)[:100]}"
+        error_msg = f"ERROR: Refinement failed: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
         return current_content, state, word_count(current_content)
     except Exception as e:
-        error_msg = f"❌ Unexpected error: {str(e)[:100]}"
+        error_msg = f"ERROR: Unexpected error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in refine_post: {e}")
         return current_content, state, word_count(current_content)
@@ -487,22 +487,22 @@ def approve_and_download(current_content, state):
     """
     content = current_content.strip()
     if not content:
-        gr.Warning("⚠️  Nothing to download — generate a post first.")
+        gr.Warning("WARNING: Nothing to download - generate a post first.")
         return None
+
 
     try:
         # Validate content
         if len(content) < 5:
-            gr.Warning("⚠️  Content is too short to save.")
+            gr.Warning("WARNING: Content is too short to save.")
             return None
 
         topic         = state.get("topic", "post") if state else "post"
         channel_label = state.get("channel_label", "Blog Post") if state else "Blog Post"
         channel       = state.get("channel", "blog") if state else "blog"
 
-        # Validate state
         if not state or not isinstance(state, dict):
-            gr.Warning("⚠️  No state information available.")
+            gr.Warning("WARNING: No state information available.")
             return None
 
         try:
@@ -510,7 +510,7 @@ def approve_and_download(current_content, state):
                 mode="w", suffix=".txt", delete=False,
                 prefix=f"fitbyte_{channel}_"
             )
-            tmp.write("FitByte Content — Approved\n")
+            tmp.write("FitByte Content - Approved\n")
             tmp.write(f"Topic:   {topic}\n")
             tmp.write(f"Channel: {channel_label}\n")
             tmp.write(f"Date:    {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
@@ -518,7 +518,7 @@ def approve_and_download(current_content, state):
             tmp.write(content)
             tmp.close()
 
-            gr.Info(f"✅ File saved successfully! ({len(content.split())} words)")
+            gr.Info(f"SUCCESS: File saved successfully! ({len(content.split())} words)")
             print(f"  Saved to: {tmp.name}")
             return tmp.name
 
@@ -526,17 +526,17 @@ def approve_and_download(current_content, state):
             raise RuntimeError(f"Failed to write file: {e}")
             
     except IOError as e:
-        error_msg = f"❌ File I/O error: {str(e)[:100]}"
+        error_msg = f"ERROR: File I/O error: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in approve_and_download: {e}")
         return None
     except ValueError as e:
-        error_msg = f"❌ Invalid data: {str(e)[:100]}"
+        error_msg = f"ERROR: Invalid data: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in approve_and_download: {e}")
         return None
     except Exception as e:
-        error_msg = f"❌ Failed to save file: {str(e)[:100]}"
+        error_msg = f"ERROR: Failed to save file: {str(e)[:100]}"
         gr.Error(error_msg)
         print(f"ERROR in approve_and_download: {e}")
         return None
